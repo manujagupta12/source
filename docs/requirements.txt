@@ -1,33 +1,40 @@
 # AlgoTrade — Python Dependencies
-# Install with: pip install -r requirements.txt
+# Install: pip install -r requirements.txt
 
 # Core data
 pandas>=2.0.0
 numpy>=1.24.0
-openpyxl>=3.1.0
-xlrd==2.0.1
+xlrd==2.0.1           # .xls files ONLY — do NOT upgrade to 2.1+
+openpyxl>=3.1.0       # .xlsx files (backtest downloads)
 
-# HTTP / API
+# HTTP
 requests>=2.31.0
+urllib3>=2.0.0
+
+# Web platform
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+
+# Auth
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.0.0
+
+# Environment
+python-dotenv>=1.0.0
 
 # Backtesting
 scipy>=1.11.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 
-# Web platform (Phase 3)
-fastapi>=0.104.0
-uvicorn>=0.24.0
-sqlalchemy>=2.0.0
-pydantic>=2.0.0
-python-jose>=3.3.0
-passlib>=1.7.4
-python-multipart>=0.0.6
-stripe>=7.0.0
+# Optional: PostgreSQL (production only)
+# psycopg2-binary>=2.9.0
+# sqlalchemy>=2.0.0
 
-# Database
-psycopg2-binary>=2.9.0
-redis>=5.0.0
+# Optional: Redis (production signal queuing)
+# redis>=5.0.0
 
 # Testing
 pytest>=7.4.0
