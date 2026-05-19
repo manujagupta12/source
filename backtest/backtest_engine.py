@@ -558,28 +558,28 @@ def generate_report(all_metrics, output_format="text"):
         for m in all_metrics:
             lines += [
                 f"  Strategy: {m['strategy']}",
-                f"  {'─'*50}",
+                f"  {'-'*50}",
                 f"  Total Trades     : {m.get('total_trades', 0)}",
                 f"  Win Rate         : {m.get('win_rate', 0)}%",
-                f"  Avg P&L/Trade    : ₹{m.get('avg_pnl_per_trade', 0):+,.0f}",
-                f"  Total P&L        : ₹{m.get('total_pnl', 0):+,.0f}",
-                f"  Max Drawdown     : ₹{m.get('max_drawdown', 0):,.0f}",
+                f"  Avg P&L/Trade    : Rs.{m.get('avg_pnl_per_trade', 0):+,.0f}",
+                f"  Total P&L        : Rs.{m.get('total_pnl', 0):+,.0f}",
+                f"  Max Drawdown     : Rs.{m.get('max_drawdown', 0):,.0f}",
                 f"  Sharpe Ratio     : {m.get('sharpe_ratio', 0):.2f}",
-                f"  ₹50K Target Hit  : {m.get('daily_target_hit', 0)}% of days",
-                f"  Best Day         : ₹{m.get('best_day', 0):+,.0f}",
-                f"  Worst Day        : ₹{m.get('worst_day', 0):+,.0f}",
+                f"  50K Target Hit   : {m.get('daily_target_hit', 0)}% of days",
+                f"  Best Day         : Rs.{m.get('best_day', 0):+,.0f}",
+                f"  Worst Day        : Rs.{m.get('worst_day', 0):+,.0f}",
             ]
             if m.get("by_vix_regime"):
                 lines.append("  By VIX Regime:")
                 for regime, stats in m["by_vix_regime"].items():
                     lines.append(f"    {regime:<20} Win:{stats['win_rate']}%  "
-                                 f"Avg:₹{stats['avg_pnl']:+,.0f}  "
+                                 f"Avg:Rs.{stats['avg_pnl']:+,.0f}  "
                                  f"Trades:{stats['trades']}")
             lines += ["", ""]
 
         report_text = "\n".join(lines)
         report_path = REPORTS_DIR / f"backtest_{report_date}.txt"
-        with open(report_path, "w") as f:
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write(report_text)
         print(report_text)
         print(f"\n  Report saved: {report_path}")
@@ -598,22 +598,41 @@ def _generate_html_report(all_metrics, report_date):
     """Generates a rich HTML report with charts."""
     rows = ""
     for m in all_metrics:
-        color = "#2ecc71" if m.get("total_pnl", 0) > 0 else "#e74c3c"
+        pnl       = m.get("total_pnl", 0)
+        avg_pnl   = m.get("avg_pnl_per_trade", 0)
+        sharpe    = m.get("sharpe_ratio", 0)
+        win_rate  = m.get("win_rate", 0)
+
+        # Grade based on Sharpe + win rate
+        if sharpe >= 1.0 and win_rate >= 60:
+            grade_cls, grade_txt = "strong", "STRONG"
+        elif sharpe >= 0.5 and win_rate >= 50:
+            grade_cls, grade_txt = "good",   "GOOD"
+        else:
+            grade_cls, grade_txt = "weak",   "WEAK"
+
+        pnl_cls     = "pos" if pnl   >= 0 else "neg"
+        avg_pnl_cls = "pos" if avg_pnl >= 0 else "neg"
+
         rows += f"""
         <tr>
           <td><b>{m['strategy']}</b></td>
+          <td><span class="grade {grade_cls}">{grade_txt}</span></td>
           <td>{m.get('total_trades', 0)}</td>
-          <td>{m.get('win_rate', 0)}%</td>
-          <td style="color:{color}">₹{m.get('avg_pnl_per_trade', 0):+,.0f}</td>
-          <td style="color:{color}">₹{m.get('total_pnl', 0):+,.0f}</td>
-          <td>₹{abs(m.get('max_drawdown', 0)):,.0f}</td>
-          <td>{m.get('sharpe_ratio', 0):.2f}</td>
+          <td>{win_rate}%</td>
+          <td class="{avg_pnl_cls}">Rs.{avg_pnl:+,.0f}</td>
+          <td class="{pnl_cls}">Rs.{pnl:+,.0f}</td>
+          <td>Rs.{abs(m.get('max_drawdown', 0)):,.0f}</td>
+          <td>{sharpe:.2f}</td>
           <td>{m.get('daily_target_hit', 0)}%</td>
+          <td class="pos">Rs.{m.get('best_day', 0):+,.0f}</td>
+          <td class="neg">Rs.{m.get('worst_day', 0):+,.0f}</td>
         </tr>"""
 
     html = f"""<!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>AlgoTrade Backtest Report — {report_date}</title>
   <style>
     body {{ font-family: Arial; background: #1a1a2e; color: #eee; padding: 30px; }}
@@ -623,16 +642,22 @@ def _generate_html_report(all_metrics, report_date):
     td {{ padding: 10px; border-bottom: 1px solid #333; }}
     tr:hover {{ background: #16213e; }}
     .summary {{ background: #16213e; border-radius: 8px; padding: 20px; margin: 20px 0; }}
+    .pos {{ color: #00ff9d; font-weight: bold; }}
+    .neg {{ color: #ff4444; font-weight: bold; }}
+    .grade {{ display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; }}
+    .strong {{ background: rgba(0,255,157,.15); color: #00ff9d; }}
+    .good   {{ background: rgba(245,197,24,.15); color: #f5c518; }}
+    .weak   {{ background: rgba(255,68,68,.15);  color: #ff4444; }}
   </style>
 </head>
 <body>
-  <h1>📊 AlgoTrade Backtest Report</h1>
-  <div class="summary">Generated: {report_date} | 5-Year NSE Historical Data</div>
+  <h1>AlgoTrade Backtest Report</h1>
+  <div class="summary">Generated: {report_date} | 5-Year NSE Historical Data (Black-Scholes Synthetic Chain)</div>
   <table>
     <tr>
-      <th>Strategy</th><th>Trades</th><th>Win Rate</th>
-      <th>Avg P&L</th><th>Total P&L</th><th>Max DD</th>
-      <th>Sharpe</th><th>50K Hit Rate</th>
+      <th>Strategy</th><th>Grade</th><th>Trades</th><th>Win Rate</th>
+      <th>Avg P&amp;L / Trade</th><th>Total P&amp;L</th><th>Max Drawdown</th>
+      <th>Sharpe Ratio</th><th>50K Hit Rate</th><th>Best Day</th><th>Worst Day</th>
     </tr>
     {rows}
   </table>
@@ -640,7 +665,7 @@ def _generate_html_report(all_metrics, report_date):
 </html>"""
 
     path = REPORTS_DIR / f"backtest_{report_date}.html"
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"  HTML report saved: {path}")
 

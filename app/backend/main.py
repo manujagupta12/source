@@ -22,18 +22,21 @@ import uvicorn
 # ── Optional heavy imports (graceful if missing) ─────────────────
 try:
     from jose import JWTError, jwt
-    from passlib.context import CryptContext
-    _AUTH_OK = True
+    _JWT_OK = True
 except ImportError:
-    _AUTH_OK = False
+    _JWT_OK = False
+
+# Use bcrypt directly — passlib is broken on Python 3.14 + newer bcrypt
+try:
+    import bcrypt as _bcrypt_lib
+    _BCRYPT_OK = True
+except ImportError:
+    _BCRYPT_OK = False
 
 try:
-    from pydantic import BaseModel, EmailStr
-    _PYDANTIC_OK = True
-except ImportError:
     from pydantic import BaseModel
-    EmailStr = str
-    _PYDANTIC_OK = True
+except ImportError:
+    from pydantic import BaseModel  # type: ignore
 
 # ════════════════════════════════════════════════════════════════
 #  CONFIG
@@ -61,30 +64,40 @@ TIERS = {
 
 # ════════════════════════════════════════════════════════════════
 #  AUTH HELPERS
+#  Uses bcrypt directly — passlib is incompatible with Python 3.14
 # ════════════════════════════════════════════════════════════════
-if _AUTH_OK:
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_password(pw: str) -> str:
+    """Hash a password using bcrypt (or SHA-256 fallback)."""
+    if _BCRYPT_OK:
+        # bcrypt requires bytes; encode to UTF-8, truncate to 72 bytes max
+        pw_bytes = pw.encode("utf-8")[:72]
+        return _bcrypt_lib.hashpw(pw_bytes, _bcrypt_lib.gensalt()).decode("utf-8")
+    # SHA-256 fallback (acceptable for dev/demo — use bcrypt in production)
+    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
 
-    def hash_password(pw: str) -> str:
-        return pwd_context.hash(pw)
-
-    def verify_password(pw: str, hashed: str) -> bool:
-        return pwd_context.verify(pw, hashed)
-else:
-    def hash_password(pw): return hashlib.sha256(pw.encode()).hexdigest()
-    def verify_password(pw, hashed): return hash_password(pw) == hashed
+def verify_password(pw: str, hashed: str) -> bool:
+    """Verify a password against its hash."""
+    if _BCRYPT_OK:
+        try:
+            pw_bytes     = pw.encode("utf-8")[:72]
+            hashed_bytes = hashed.encode("utf-8")
+            return _bcrypt_lib.checkpw(pw_bytes, hashed_bytes)
+        except Exception:
+            return False
+    return hashlib.sha256(pw.encode("utf-8")).hexdigest() == hashed
 
 def create_token(data: dict, expires_minutes: int = TOKEN_EXPIRE) -> str:
     payload = data.copy()
     payload["exp"] = datetime.utcnow() + timedelta(minutes=expires_minutes)
-    if _AUTH_OK:
+    if _JWT_OK:
         return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    # Base64 fallback for dev (not secure — install python-jose for production)
     import base64
     return base64.b64encode(json.dumps(payload).encode()).decode()
 
 def decode_token(token: str) -> Optional[dict]:
     try:
-        if _AUTH_OK:
+        if _JWT_OK:
             return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         import base64
         return json.loads(base64.b64decode(token.encode()).decode())
