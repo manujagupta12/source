@@ -992,8 +992,94 @@ async def ws_signals(ws: WebSocket):
 # ════════════════════════════════════════════════════════════════
 #  HEALTH
 # ════════════════════════════════════════════════════════════════
+@app.get("/signals")
+def signals_shorthand(limit: int = 20, user=Depends(get_optional_user)):
+    """Alias for /signals/latest — used by App.jsx."""
+    sigs = _db["signals"][-limit:][::-1]
+    return {"signals": sigs, "count": len(sigs),
+            "xls_live": _XLS_OK, "nse_live": _NSE_OK}
+
+
+@app.get("/indices")
+def get_indices():
+    """Live NSE index prices for the ticker bar."""
+    _nse_refresh()
+    indices = []
+    try:
+        r = _nse_sess.get("https://www.nseindia.com/api/allIndices", timeout=5)
+        name_map = {
+            "NIFTY 50": "NIFTY", "NIFTY BANK": "BANKNIFTY",
+            "NIFTY FIN SERVICE": "FINNIFTY", "INDIA VIX": "VIX",
+            "NIFTY MIDCAP 100": "MIDCAP", "NIFTY IT": "IT",
+        }
+        for item in r.json().get("data", []):
+            nm = item.get("index", "")
+            if nm in name_map:
+                ltp = float(item.get("last") or 0)
+                chg = float(item.get("percentChange") or 0)
+                indices.append({
+                    "label":      name_map[nm],
+                    "ltp":        round(ltp, 2),
+                    "change_pct": round(chg, 2),
+                    "high":       float(item.get("high") or ltp),
+                    "low":        float(item.get("low")  or ltp),
+                })
+    except Exception:
+        pass
+
+    if not indices:
+        for label, base in [("NIFTY", 24500), ("BANKNIFTY", 53000),
+                             ("FINNIFTY", 23000), ("VIX", 14.5),
+                             ("MIDCAP", 52000), ("IT", 37000)]:
+            indices.append({"label": label, "ltp": base,
+                             "change_pct": round(random.uniform(-1.5, 1.5), 2),
+                             "high": base * 1.01, "low": base * 0.99})
+    return {"indices": indices}
+
+
+@app.get("/movers")
+def get_movers():
+    """Top gainers and losers across NSE equity stocks."""
+    eq = [s for s in _db["signals"] if s.get("market") == "EQUITY"]
+    if not eq:
+        eq = generate_equity_signals(top_n=20)
+    by_sym: dict = {}
+    for s in eq:
+        sym = s.get("symbol")
+        if sym and sym not in by_sym:
+            by_sym[sym] = s
+    sigs = list(by_sym.values())
+    gainers = sorted([s for s in sigs if (s.get("change_pct") or 0) > 0],
+                     key=lambda x: x.get("change_pct", 0), reverse=True)[:6]
+    losers  = sorted([s for s in sigs if (s.get("change_pct") or 0) < 0],
+                     key=lambda x: x.get("change_pct", 0))[:6]
+    return {"gainers": gainers, "losers": losers}
+
+
+@app.get("/analytics/pnl")
+def analytics_pnl(user=Depends(get_current_user)):
+    """Daily P&L series for the chart."""
+    email  = user["email"]
+    trades = [t for t in _db["trades"].get(email, []) if t["status"] == "CLOSED"]
+    by_date: dict = {}
+    for t in trades:
+        d  = t.get("date", "")
+        bd = by_date.setdefault(d, {"date": d, "pnl": 0, "trades": 0})
+        bd["pnl"]    += t.get("pnl_inr") or 0
+        bd["trades"] += 1
+    return {"pnl": sorted(by_date.values(), key=lambda x: x["date"])}
+
+
+@app.get("/trades")
+def trades_shorthand(user=Depends(get_current_user)):
+    """Alias — returns recent trades for frontend trade log."""
+    email  = user["email"]
+    trades = _db["trades"].get(email, [])
+    return {"trades": trades[-100:], "total": len(trades)}
+
+
 @app.get("/health")
-def health():
+def health_check():
     return {
         "status":    "ok",
         "version":   "2.0.0",

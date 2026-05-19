@@ -692,23 +692,39 @@ export default function App(){
       ws.onmessage=e=>{
         try{
           const d=JSON.parse(e.data);
-          // TICK: fast 1s price update — indices + regime only
-          if(d.type==="TICK"){
-            if(d.index_snap?.length) setIdxs(prev=>{
-              // Flash detection: compare LTP changes
-              return d.index_snap.map((idx,i)=>{
-                const prev_ltp=prev[i]?.ltp||0;
-                const flash = idx.ltp>prev_ltp?"flash-up":idx.ltp<prev_ltp?"flash-dn":"";
-                return {...idx, _flash: flash, _ts: Date.now()};
-              });
-            });
-            if(d.regime) setRegime(d.regime);
+          // F&O signal (single)
+          if(d.type==="signal"&&d.data){
+            setSigs(prev=>[d.data,...prev].slice(0,200));
+            if(d.data.regime) setRegime(r=>({...r,regime:d.data.regime,vix:d.data.vix}));
             return;
           }
-          // UPDATE: full signal refresh every 5s
-          if(d.signals?.length)    setSigs(d.signals);
-          if(d.regime)             setRegime(d.regime);
-          if(d.index_snap?.length) setIdxs(d.index_snap.map(idx=>({...idx,_flash:"flash-neutral",_ts:Date.now()})));
+          // Equity signals batch (from full universe scan)
+          if(d.type==="equity_signals"&&d.signals?.length){
+            setSigs(prev=>{
+              const existing=prev.filter(s=>s.market!=="EQUITY");
+              return [...d.signals,...existing].slice(0,300);
+            });
+            return;
+          }
+          // Regime update
+          if(d.type==="regime"||d.regime){
+            setRegime(r=>({...r,...(d.type==="regime"?d:d.regime)}));
+            return;
+          }
+          // Index tick
+          if(d.type==="TICK"||d.index_snap?.length){
+            const snap=d.index_snap||d.indices||[];
+            if(snap.length) setIdxs(prev=>snap.map((idx,i)=>{
+              const prev_ltp=prev[i]?.ltp||0;
+              return {...idx,_flash:idx.ltp>prev_ltp?"flash-up":idx.ltp<prev_ltp?"flash-dn":"",_ts:Date.now()};
+            }));
+            if(d.regime) setRegime(r=>({...r,...d.regime}));
+            return;
+          }
+          // Legacy batch update
+          if(d.signals?.length) setSigs(d.signals);
+          if(d.regime)          setRegime(r=>({...r,...d.regime}));
+          if(d.index_snap?.length) setIdxs(d.index_snap.map(idx=>({...idx,_flash:"",_ts:Date.now()})));
         }catch{}
       };
     };
@@ -726,6 +742,27 @@ export default function App(){
     api("/indices").then(d=>{
       if(d.indices?.length) setIdxs(d.indices);
     }).catch(()=>{});
+    // Initial equity signals fetch
+    api("/signals/equity?top=15").then(d=>{
+      if(d.signals?.length) setSigs(prev=>{
+        const fo=prev.filter(s=>s.market!=="EQUITY");
+        return [...d.signals,...fo].slice(0,300);
+      });
+    }).catch(()=>{});
+  },[user]);
+
+  // Equity signals refresh every 45s (full universe scan takes ~30s on server)
+  useEffect(()=>{
+    if(!user) return;
+    const iv=setInterval(()=>{
+      api("/signals/equity?top=15").then(d=>{
+        if(d.signals?.length) setSigs(prev=>{
+          const fo=prev.filter(s=>s.market!=="EQUITY");
+          return [...d.signals,...fo].slice(0,300);
+        });
+      }).catch(()=>{});
+    }, 45000);
+    return()=>clearInterval(iv);
   },[user]);
 
   if(!user) return <Login onLogin={u=>setUser(u)}/>;
