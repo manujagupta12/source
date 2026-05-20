@@ -90,12 +90,19 @@ def safe_read(xls_path: str = XLS_PATH,
               temp_path: str = TEMP_PATH) -> pd.DataFrame | None:
     """
     Copy-then-read to avoid PermissionError when Excel has the file open.
+    Uses a timestamped temp file to avoid permission conflicts on _temp_read.xls.
     Returns raw DataFrame with header=9, or None on failure.
     """
+    import time as _time
+    # Use a unique temp name to avoid permission conflicts
+    ts_suffix = str(int(_time.time() * 1000) % 100000)
+    base = os.path.splitext(temp_path)[0]
+    unique_temp = f"{base}_{ts_suffix}.xls"
+
     try:
-        shutil.copy2(xls_path, temp_path)
+        shutil.copy2(xls_path, unique_temp)
     except PermissionError:
-        print(f"  [XLS] File locked by Excel — waiting...")
+        print(f"  [XLS] Source file locked — MultiTrade may be writing")
         return None
     except FileNotFoundError:
         print(f"  [XLS] File not found: {xls_path}")
@@ -105,11 +112,21 @@ def safe_read(xls_path: str = XLS_PATH,
         return None
 
     try:
-        df = pd.read_excel(temp_path, header=HEADER_ROW, engine="xlrd")
+        df = pd.read_excel(unique_temp, header=HEADER_ROW, engine="xlrd")
         return df
     except Exception as e:
-        print(f"  [XLS] Read error: {e}")
+        err = str(e)
+        if "BOF" in err or "corrupt" in err.lower() or "format" in err.lower():
+            # File was being written mid-copy — silently skip
+            pass
+        else:
+            print(f"  [XLS] Read error: {e}")
         return None
+    finally:
+        try:
+            os.remove(unique_temp)
+        except Exception:
+            pass
 
 
 def parse_instruments(df: pd.DataFrame) -> pd.DataFrame | None:
@@ -253,6 +270,7 @@ def get_spread(df: pd.DataFrame, strike: int,
                option_type: str = "CE") -> dict | None:
     """
     Calculate calendar spread for a given strike and option type.
+    If exact strike not found, tries the nearest available strike.
 
     Calendar Spread = Far Leg (2nd Leg) BID - Near Leg ASK
     Fair Value      = (Far Theta - Near Theta) × 0.5
@@ -261,8 +279,17 @@ def get_spread(df: pd.DataFrame, strike: int,
     Returns None if data is missing.
     """
     rows = df[(df["STRIKE"] == strike) & (df["TYPE"] == option_type)]
+
+    # If exact strike missing, find nearest available for this option type
     if rows.empty:
-        return None
+        avail = df[df["TYPE"] == option_type]["STRIKE"].dropna().astype(int).unique()
+        if len(avail) == 0:
+            return None
+        nearest = int(min(avail, key=lambda s: abs(s - strike)))
+        rows = df[(df["STRIKE"] == nearest) & (df["TYPE"] == option_type)]
+        if rows.empty:
+            return None
+        strike = nearest  # use nearest strike
 
     row = rows.iloc[0]
 
@@ -322,6 +349,9 @@ def get_spread(df: pd.DataFrame, strike: int,
         "near_delta":   round(nd, 4) if not np.isnan(nd) else None,
         "far_delta":    round(fd, 4) if not np.isnan(fd) else None,
         "cost":         round(cost, 2) if not np.isnan(cost) else None,
+        # Explicit far bid/ask (used by Calendaralgofinal.py display)
+        "far_bid":      round(far_bid_for_spread, 2),
+        "far_ask":      round(far_bid_for_spread + 0.10, 2),
         # Limit order prices for execution
         "sell_near_at": round(near_bid_px - 0.05, 2),
         "buy_near_at":  round(near_ask_px + 0.05, 2),

@@ -162,7 +162,7 @@ def print_entry_ce(sig, strike, far_strike, spread, fair, vix, px):
 │  Strike : {strike}  |  VIX : {vix}
 │  ─────────────────────────────────────────────────────────
 │  {leg1}
-│    Bid : {px['far_bid']}   Ask : {px['far_ask']}
+│    Bid : {px.get('far_leg') or px.get('bid','—')}   Ask : {px.get('far_leg') or px.get('ask','—')}
 │    ✅ {px1_label} @ {px1}
 │
 │  {leg2}
