@@ -1,12 +1,5 @@
 """
 ALGOTRADE BACKEND  —  app/backend/main.py
-==========================================
-FastAPI production server.
-
-FIX 1 (indices stagnant): _nse_refresh() now reinits session every 60s
-       (was 300s) + signal_loop pushes indices_update via WebSocket every 10s.
-FIX 2 (F&O calendar blank): Added POST /signals/fo_ingest endpoint that
-       Calendaralgofinal.py posts to; backend broadcasts to all WS clients.
 """
 
 import asyncio
@@ -58,7 +51,6 @@ except Exception:
     _NSE_OK = False
     _nse_enhancer = None
 
-# ── Config ────────────────────────────────────────────────────
 SECRET_KEY   = os.environ.get("SECRET_KEY", "algotrade-dev-secret-CHANGE-IN-PROD")
 ALGORITHM    = "HS256"
 TOKEN_EXPIRE = 60 * 24
@@ -76,17 +68,12 @@ TIERS = {
 }
 
 PLANS_LIST = [
-    {"id": "free",    "name": "Free",    "price": 0,
-     "features": ["Paper trading", "15-min delayed", "2 strategies"]},
-    {"id": "starter", "name": "Starter", "price": 2999,
-     "features": ["Live signals", "All 7 strategies", "3 instruments"]},
-    {"id": "pro",     "name": "Pro",     "price": 7999,
-     "features": ["Everything in Starter", "5 instruments", "Backtest"]},
-    {"id": "elite",   "name": "Elite",   "price": 19999,
-     "features": ["Everything in Pro", "API access", "Custom alerts"]},
+    {"id": "free",    "name": "Free",    "price": 0,     "features": ["Paper trading", "15-min delayed", "2 strategies"]},
+    {"id": "starter", "name": "Starter", "price": 2999,  "features": ["Live signals", "All 7 strategies", "3 instruments"]},
+    {"id": "pro",     "name": "Pro",     "price": 7999,  "features": ["Everything in Starter", "5 instruments", "Backtest"]},
+    {"id": "elite",   "name": "Elite",   "price": 19999, "features": ["Everything in Pro", "API access", "Custom alerts"]},
 ]
 
-# ── Auth ──────────────────────────────────────────────────────
 def hash_password(pw):
     if _BCRYPT_OK:
         return _bcrypt.hashpw(pw.encode()[:72], _bcrypt.gensalt()).decode()
@@ -127,7 +114,6 @@ def get_optional_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     if not payload: return None
     return _db["users"].get(payload.get("sub"))
 
-# ── Models ────────────────────────────────────────────────────
 class RegisterRequest(BaseModel):
     name: str; email: str; password: str
 
@@ -142,7 +128,6 @@ class TradeLogRequest(BaseModel):
 class TradeCloseRequest(BaseModel):
     trade_id: str; exit_spread: float; notes: Optional[str] = ""
 
-# FIX 2: model for calendar algo ingest
 class FoSignalIngest(BaseModel):
     strategy: str; instrument: str; direction: str
     near_strike: Optional[int]   = None
@@ -169,36 +154,54 @@ class FoSignalIngest(BaseModel):
     sell_near_at: Optional[float] = None
     event_type:  Optional[str]   = "signal"
 
-# ── Mock / XLS signal engine ──────────────────────────────────
 _MOCK_STRATEGIES = ["S1 CALENDAR", "S2 IRON CONDOR", "S3 SHORT STRADDLE", "S4 MOMENTUM", "S7 RATIO SPREAD"]
 _MOCK_REGIMES    = ["R2 SIDEWAYS LOW", "R3 SIDEWAYS HIGH IV", "R4 TRENDING BULL", "R6 HIGH VOLATILITY"]
 LOT_SIZES        = {"NIFTY": 25, "BANKNIFTY": 15, "FINNIFTY": 40}
 
 def _mock_signal():
-    spot  = 53000 + random.randint(-800, 800)
-    atm   = int(round(spot / 100) * 100)
-    strat = random.choice(_MOCK_STRATEGIES)
-    score = random.randint(45, 95)
-    dirn  = random.choice(["LONG", "SHORT"])
-    spread = round(random.uniform(-8, 8), 2)
-    fair   = round(spread + random.uniform(-3, 3), 2)
-    vix    = round(random.uniform(12, 22), 2)
+    instruments = ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+    instrument  = random.choice(instruments)
+    bases       = {"NIFTY": 24500, "BANKNIFTY": 53000, "FINNIFTY": 23000}
+    steps       = {"NIFTY": 50,    "BANKNIFTY": 100,   "FINNIFTY": 50}
+    base        = bases[instrument]
+    spot        = base + random.randint(-500, 500)
+    atm         = int(round(spot / steps[instrument]) * steps[instrument])
+    strat       = random.choice(_MOCK_STRATEGIES)
+    score       = random.randint(55, 95)
+    dirn        = random.choice(["LONG", "SHORT"])
+    spread      = round(random.uniform(-8, 8), 2)
+    fair        = round(spread + random.uniform(-3, 3), 2)
+    vix         = round(random.uniform(12, 22), 2)
     return {
-        "timestamp": datetime.now().isoformat(), "source": "mock",
-        "strategy": strat, "score": score, "direction": dirn,
-        "instrument": "BANKNIFTY", "near_strike": atm, "far_strike": atm,
-        "spread": spread, "fair_value": fair, "deviation": round(spread - fair, 2),
-        "vix": vix, "regime": random.choice(_MOCK_REGIMES),
-        "risk": "LOW" if vix < 13 else "MEDIUM" if vix < 19 else "HIGH",
-        "near_bid": round(150 + random.uniform(-20, 20), 2),
-        "near_ask": round(152 + random.uniform(-20, 20), 2),
-        "far_bid":  round(155 + random.uniform(-20, 20), 2),
-        "far_ask":  round(157 + random.uniform(-20, 20), 2),
+        "timestamp":    datetime.now().isoformat(),
+        "source":       "mock",
+        "market":       "FO",
+        "strategy":     strat,
+        "score":        score,
+        "direction":    dirn,
+        "instrument":   instrument,
+        "symbol":       instrument,
+        "near_strike":  atm,
+        "far_strike":   atm,
+        "spread":       spread,
+        "fair_value":   fair,
+        "deviation":    round(spread - fair, 2),
+        "vix":          vix,
+        "regime":       random.choice(_MOCK_REGIMES),
+        "risk":         "LOW" if vix < 13 else "MEDIUM" if vix < 19 else "HIGH",
+        "near_bid":     round(150 + random.uniform(-20, 20), 2),
+        "near_ask":     round(152 + random.uniform(-20, 20), 2),
+        "far_bid":      round(155 + random.uniform(-20, 20), 2),
+        "far_ask":      round(157 + random.uniform(-20, 20), 2),
         "buy_far_at":   round(156 + random.uniform(-5, 5), 2),
         "sell_near_at": round(149 + random.uniform(-5, 5), 2),
-        "target_pts": 8, "sl_pts": 6, "lots_suggested": random.randint(1, 5),
-        "reason": f"Spread deviation | VIX {vix:.1f}",
-        "orders": f"BUY Far {atm} @ 156\nSELL Near {atm} @ 149",
+        "target_pts":   8,
+        "sl_pts":       6,
+        "lots_suggested": random.randint(1, 5),
+        "reason":       f"Spread deviation {abs(round(spread-fair,2)):.2f}pts | VIX {vix:.1f}",
+        "action":       f"{dirn} {instrument} Calendar @ {atm}",
+        "orders":       f"BUY Far {instrument} {atm} @ {round(156+random.uniform(-5,5),2)}\nSELL Near {instrument} {atm} @ {round(149+random.uniform(-5,5),2)}",
+        "event_type":   "signal",
     }
 
 def _xls_signal():
@@ -216,17 +219,34 @@ def _xls_signal():
         dirn   = "LONG" if dev < -3 else "SHORT" if dev > 3 else "WAIT"
         if dirn == "WAIT": return None
         sig = {
-            "timestamp": datetime.now().isoformat(), "source": "xls_live",
-            "strategy": "S1 CALENDAR", "score": score, "direction": dirn,
-            "instrument": "BANKNIFTY", "near_strike": atm, "far_strike": atm,
-            "spread": spread, "fair_value": fair, "deviation": dev,
-            "vix": None, "regime": "LIVE", "risk": "MEDIUM",
-            "near_bid": ce.get("bid"), "near_ask": ce.get("ask"),
-            "far_bid": ce.get("far_leg"), "buy_far_at": ce.get("buy_far_at"),
+            "timestamp":    datetime.now().isoformat(),
+            "source":       "xls_live",
+            "market":       "FO",
+            "strategy":     "S1 CALENDAR",
+            "score":        score,
+            "direction":    dirn,
+            "instrument":   "BANKNIFTY",
+            "symbol":       "BANKNIFTY",
+            "near_strike":  atm,
+            "far_strike":   atm,
+            "spread":       spread,
+            "fair_value":   fair,
+            "deviation":    dev,
+            "vix":          None,
+            "regime":       "LIVE",
+            "risk":         "MEDIUM",
+            "near_bid":     ce.get("bid"),
+            "near_ask":     ce.get("ask"),
+            "far_bid":      ce.get("far_leg"),
+            "buy_far_at":   ce.get("buy_far_at"),
             "sell_near_at": ce.get("sell_near_at"),
-            "target_pts": 8, "sl_pts": 6, "lots_suggested": 1,
-            "reason": f"CE Spread {spread:+.2f} | Fair {fair:+.2f} | Dev {dev:+.2f}",
-            "orders": f"BUY Far {atm} CE @ {ce.get('buy_far_at')}\nSELL Near {atm} CE @ {ce.get('sell_near_at')}",
+            "target_pts":   8,
+            "sl_pts":       6,
+            "lots_suggested": 1,
+            "reason":       f"CE Spread {spread:+.2f} | Fair {fair:+.2f} | Dev {dev:+.2f}",
+            "action":       f"{dirn} BANKNIFTY Calendar @ {atm}",
+            "orders":       f"BUY Far {atm} CE @ {ce.get('buy_far_at')}\nSELL Near {atm} CE @ {ce.get('sell_near_at')}",
+            "event_type":   "signal",
         }
         if pe:
             sig.update({"pe_spread": pe.get("spread"), "pe_deviation": pe.get("deviation"),
@@ -236,7 +256,6 @@ def _xls_signal():
         logging.debug(f"[XLS] {e}")
         return None
 
-# ── NSE F&O universe ──────────────────────────────────────────
 NSE_FO_STOCKS = [
     "ADANIENT","ADANIPORTS","APOLLOHOSP","ASIANPAINT","AXISBANK",
     "BAJAJ-AUTO","BAJAJFINSV","BAJFINANCE","BHARTIARTL","BPCL",
@@ -283,9 +302,7 @@ import requests as _req
 _nse_sess    = _req.Session()
 _nse_sess_ts = 0.0
 
-
 def _nse_refresh():
-    """FIX 1: Reinit session every 60s (was 300s) to avoid stale NSE cookies."""
     global _nse_sess, _nse_sess_ts
     if time.time() - _nse_sess_ts > 60:
         try:
@@ -299,7 +316,6 @@ def _nse_refresh():
             _nse_sess_ts = time.time()
         except Exception:
             pass
-
 
 def _nse_equity_quote(symbol):
     _nse_refresh()
@@ -319,12 +335,9 @@ def _nse_equity_quote(symbol):
     except Exception:
         return {}
 
-
-# FIX 1: dedicated index fetch function + cache
 _latest_indices: list = []
 
 def _fetch_live_indices() -> list:
-    """Fetch all NSE indices. Returns list of dicts with live prices."""
     _nse_refresh()
     indices = []
     try:
@@ -356,7 +369,7 @@ def _fetch_live_indices() -> list:
                              ("MIDCAP", 52000), ("IT", 37000)]:
             indices.append({
                 "label":      label,
-                "ltp":        round(base + random.uniform(-base * 0.005, base * 0.005), 2),
+                "ltp":        round(base + random.uniform(-base * 0.008, base * 0.008), 2),
                 "change_pct": round(random.uniform(-1.5, 1.5), 2),
                 "change":     round(random.uniform(-200, 200), 2),
                 "high":       round(base * 1.01, 2),
@@ -364,7 +377,6 @@ def _fetch_live_indices() -> list:
                 "_ts":        int(time.time()),
             })
     return indices
-
 
 def generate_equity_signals(top_n=8):
     signals = []
@@ -383,12 +395,12 @@ def generate_equity_signals(top_n=8):
             if ltp == 0:
                 ltp = random.uniform(500, 4000)
                 q   = {"ltp": ltp, "change_pct": random.uniform(-3, 3),
-                       "open": ltp * 0.998, "high": ltp * 1.012,
-                       "low":  ltp * 0.988, "prev_close": ltp * 0.997}
+                       "open": ltp*0.998, "high": ltp*1.012,
+                       "low":  ltp*0.988, "prev_close": ltp*0.997}
             chg   = float(q.get("change_pct") or 0)
             prev  = float(q.get("prev_close") or ltp)
-            high  = float(q.get("high") or ltp * 1.01)
-            low   = float(q.get("low")  or ltp * 0.99)
+            high  = float(q.get("high") or ltp*1.01)
+            low   = float(q.get("low")  or ltp*0.99)
             open_ = float(q.get("open") or ltp)
             gap_pct = (open_ - prev) / prev * 100 if prev else 0
 
@@ -414,18 +426,16 @@ def generate_equity_signals(top_n=8):
                     reason   = f"ORB {'breakout' if direction=='BUY' else 'breakdown'}"
 
             if not strategy or not direction or score < 55: continue
-
             buf    = ltp * 0.002
             entry  = round(ltp + buf  if direction == "BUY" else ltp - buf, 2)
             target = round(ltp * 1.015 if direction == "BUY" else ltp * 0.985, 2)
             sl     = round(ltp * 0.993  if direction == "BUY" else ltp * 1.007, 2)
-
             signals.append({
                 "market": "EQUITY", "strategy": strategy, "symbol": stock,
                 "score": score, "direction": direction, "risk": "MEDIUM",
-                "ltp": round(ltp, 2), "change_pct": round(chg, 2),
-                "open": round(open_, 2), "high": round(high, 2),
-                "low":  round(low, 2),  "prev_close": round(prev, 2),
+                "ltp": round(ltp,2), "change_pct": round(chg,2),
+                "open": round(open_,2), "high": round(high,2),
+                "low": round(low,2), "prev_close": round(prev,2),
                 "entry_at": entry, "target_at": target, "sl_at": sl,
                 "source": "NSE_DIRECT" if market_open else "NSE_EOD",
                 "timestamp": datetime.now().isoformat(),
@@ -435,8 +445,6 @@ def generate_equity_signals(top_n=8):
             continue
     return sorted(signals, key=lambda x: x["score"], reverse=True)[:top_n]
 
-
-# ── WebSocket broadcaster ─────────────────────────────────────
 class Broadcaster:
     def __init__(self): self.connections: List[WebSocket] = []
     async def connect(self, ws):
@@ -452,49 +460,26 @@ class Broadcaster:
 
 broadcaster = Broadcaster()
 
-
 async def signal_loop():
-    """
-    Background loop.
-    Every 5s  — F&O signal (XLS or mock)
-    Every 10s — FIX 1: push live index prices via WebSocket  <-- NEW
-    Every 30s — Equity signals batch
-    Every 2.5m — Regime update
-    Every 1m  — Heartbeat
-    """
     global _latest_indices
     cycle = 0
     while True:
         await asyncio.sleep(5)
         cycle += 1
-
-        # F&O signal
         sig = _xls_signal() or _mock_signal()
         _db["signals"].append(sig)
         _db["signals"] = _db["signals"][-200:]
         await broadcaster.broadcast({"type": "signal", "data": sig})
-
-        # FIX 1: push live index prices every 2 cycles (~10s)
-        # Previously never pushed — ticker bar was always stale
         if cycle % 2 == 0:
-            indices = await asyncio.get_event_loop().run_in_executor(
-                None, _fetch_live_indices)
+            indices = await asyncio.get_event_loop().run_in_executor(None, _fetch_live_indices)
             if indices:
                 _latest_indices = indices
-                await broadcaster.broadcast({
-                    "type":    "indices_update",
-                    "indices": indices,
-                    "_ts":     int(time.time()),
-                })
-
-        # Equity signals every ~30s
+                await broadcaster.broadcast({"type": "indices_update", "indices": indices, "_ts": int(time.time())})
         if cycle % 6 == 0:
             eq = generate_equity_signals(top_n=6)
             for s in eq: _db["signals"].append(s)
             _db["signals"] = _db["signals"][-300:]
             await broadcaster.broadcast({"type": "equity_signals", "signals": eq, "count": len(eq)})
-
-        # Regime every ~2.5min
         if cycle % 30 == 0:
             last = _db["signals"][-1]
             await broadcaster.broadcast({
@@ -502,14 +487,11 @@ async def signal_loop():
                 "vix": last.get("vix"), "risk": last.get("risk", "MEDIUM"),
                 "timestamp": last.get("timestamp"), "source": last.get("source", "mock"),
             })
-
-        # Heartbeat every 1min
         if cycle % 12 == 0:
             await broadcaster.broadcast({
                 "type": "heartbeat", "xls_live": _XLS_OK, "nse_live": _NSE_OK,
                 "signals_n": len(_db["signals"]), "timestamp": datetime.now().isoformat(),
             })
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -526,12 +508,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AlgoTrade API", version="2.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000",
-                   "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:5173","http://localhost:3000",
+                   "http://127.0.0.1:5173","http://127.0.0.1:3000"],
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-
-# ── Auth routes ───────────────────────────────────────────────
 @app.post("/auth/register")
 def register(req: RegisterRequest):
     if req.email in _db["users"]: raise HTTPException(400, "Email already registered")
@@ -540,8 +520,8 @@ def register(req: RegisterRequest):
         "password": hash_password(req.password), "plan": "free",
         "joined": str(date.today()), "daily_target": 50000,
     }
-    token = create_token({"sub": req.email})
-    return {"token": token, "user": {k: v for k, v in _db["users"][req.email].items() if k != "password"}}
+    return {"token": create_token({"sub": req.email}),
+            "user": {k:v for k,v in _db["users"][req.email].items() if k!="password"}}
 
 @app.post("/auth/login")
 def login(req: LoginRequest):
@@ -549,14 +529,12 @@ def login(req: LoginRequest):
     if not user or not verify_password(req.password, user["password"]):
         raise HTTPException(401, "Invalid credentials")
     return {"token": create_token({"sub": req.email}),
-            "user": {k: v for k, v in user.items() if k != "password"}}
+            "user": {k:v for k,v in user.items() if k!="password"}}
 
 @app.get("/auth/me")
 def me(user=Depends(get_current_user)):
-    return {k: v for k, v in user.items() if k != "password"}
+    return {k:v for k,v in user.items() if k!="password"}
 
-
-# ── Signal routes ─────────────────────────────────────────────
 @app.get("/signals/latest")
 def get_signals(limit: int = 20, user=Depends(get_optional_user)):
     sigs = _db["signals"][-limit:][::-1]
@@ -568,16 +546,16 @@ def get_signals(limit: int = 20, user=Depends(get_optional_user)):
 def get_regime():
     if _db["signals"]:
         last = _db["signals"][-1]
-        return {"regime": last.get("regime", "DETECTING"), "vix": last.get("vix"),
-                "risk": last.get("risk", "MEDIUM"), "timestamp": last.get("timestamp"),
-                "source": last.get("source", "mock")}
+        return {"regime": last.get("regime","DETECTING"), "vix": last.get("vix"),
+                "risk": last.get("risk","MEDIUM"), "timestamp": last.get("timestamp"),
+                "source": last.get("source","mock")}
     return {"regime": "DETECTING", "vix": None, "risk": "UNKNOWN"}
 
 @app.get("/signals/live")
 def live_xls_signal():
     sig = _xls_signal()
     if sig: return {"signal": sig, "source": "xls_live"}
-    return {"signal": _mock_signal(), "source": "mock", "note": "XLS not available"}
+    return {"signal": _mock_signal(), "source": "mock"}
 
 @app.get("/signals/history")
 def signal_history(days: int = 7, user=Depends(get_current_user)):
@@ -586,10 +564,7 @@ def signal_history(days: int = 7, user=Depends(get_current_user)):
 @app.get("/signals/equity")
 def equity_signals(top: int = 10, user=Depends(get_optional_user)):
     signals = generate_equity_signals(top_n=top)
-    return {"signals": signals, "count": len(signals),
-            "strategies": {"E1": "EMA Crossover", "E2": "VWAP Reversion",
-                           "E3": "ORB Breakout", "E4": "ADX Trend", "E6": "Gap Fill"},
-            "timestamp": datetime.now().isoformat()}
+    return {"signals": signals, "count": len(signals), "timestamp": datetime.now().isoformat()}
 
 @app.get("/signals/equity/{symbol}")
 def equity_signal_for_symbol(symbol: str, user=Depends(get_optional_user)):
@@ -601,9 +576,6 @@ def equity_signal_for_symbol(symbol: str, user=Depends(get_optional_user)):
             "signals": generate_equity_signals(top_n=5),
             "timestamp": datetime.now().isoformat()}
 
-
-# FIX 2: F&O calendar ingest endpoint
-# Calendaralgofinal.py POSTs here -> immediately broadcast to all WS clients
 @app.post("/signals/fo_ingest")
 async def fo_ingest(req: FoSignalIngest):
     signal = {
@@ -642,8 +614,6 @@ async def fo_ingest(req: FoSignalIngest):
     logging.info(f"[FO_INGEST] {req.strategy} {req.direction} {req.instrument} @ {req.near_strike}")
     return {"ok": True, "signal": signal}
 
-
-# ── Trade routes ──────────────────────────────────────────────
 @app.post("/trades/enter")
 def enter_trade(req: TradeLogRequest, user=Depends(get_current_user)):
     import uuid
@@ -675,60 +645,54 @@ def close_trade(req: TradeCloseRequest, user=Depends(get_current_user)):
     pnl_inr = round(pnl_pts * ls * trade["lots"], 0)
     trade.update({
         "exit_time": datetime.now().isoformat(), "exit_spread": req.exit_spread,
-        "pnl_pts": round(pnl_pts, 2), "pnl_inr": int(pnl_inr), "status": "CLOSED",
+        "pnl_pts": round(pnl_pts,2), "pnl_inr": int(pnl_inr), "status": "CLOSED",
         "notes": (trade.get("notes","") + " | " + (req.notes or "")).strip(" |"),
     })
     return {"trade": trade, "pnl_inr": int(pnl_inr)}
 
 @app.get("/trades/today")
 def today_trades(user=Depends(get_current_user)):
-    email   = user["email"]; today = str(date.today())
-    todays  = [t for t in _db["trades"].get(email, []) if t.get("date") == today]
-    realised = sum(t["pnl_inr"] for t in todays if t.get("pnl_inr") and t["status"] == "CLOSED")
-    target  = user.get("daily_target", 50000)
+    email  = user["email"]; today = str(date.today())
+    todays = [t for t in _db["trades"].get(email,[]) if t.get("date")==today]
+    realised = sum(t["pnl_inr"] for t in todays if t.get("pnl_inr") and t["status"]=="CLOSED")
+    target = user.get("daily_target", 50000)
     return {"trades": todays, "realised_pnl": realised,
-            "open_count": sum(1 for t in todays if t["status"] == "OPEN"),
-            "daily_target": target, "remaining": max(0, target - realised),
-            "progress_pct": round(min(100, realised / target * 100), 1) if target else 0}
+            "open_count": sum(1 for t in todays if t["status"]=="OPEN"),
+            "daily_target": target, "remaining": max(0, target-realised),
+            "progress_pct": round(min(100, realised/target*100),1) if target else 0}
 
 @app.get("/trades/history")
 def trade_history(user=Depends(get_current_user)):
-    trades = _db["trades"].get(user["email"], [])
-    return {"trades": trades[-200:], "total": len(trades)}
+    return {"trades": _db["trades"].get(user["email"],[])[-200:],
+            "total": len(_db["trades"].get(user["email"],[]))}
 
-
-# ── Analytics ─────────────────────────────────────────────────
 @app.get("/analytics/summary")
 def analytics_summary(user=Depends(get_current_user)):
-    trades = [t for t in _db["trades"].get(user["email"], []) if t["status"] == "CLOSED"]
+    trades = [t for t in _db["trades"].get(user["email"],[]) if t["status"]=="CLOSED"]
     if not trades: return {"message": "No closed trades yet", "total_trades": 0}
-    pnls  = [t["pnl_inr"] for t in trades if t.get("pnl_inr") is not None]
-    wins  = [p for p in pnls if p > 0]
+    pnls = [t["pnl_inr"] for t in trades if t.get("pnl_inr") is not None]
+    wins = [p for p in pnls if p > 0]
     by_strat: dict = {}
     for t in trades:
-        s  = t["strategy"]
-        bs = by_strat.setdefault(s, {"trades": 0, "wins": 0, "total_pnl": 0})
-        bs["trades"]    += 1
-        bs["wins"]      += 1 if (t.get("pnl_inr") or 0) > 0 else 0
-        bs["total_pnl"] += t.get("pnl_inr") or 0
+        bs = by_strat.setdefault(t["strategy"], {"trades":0,"wins":0,"total_pnl":0})
+        bs["trades"]+=1; bs["wins"]+=1 if (t.get("pnl_inr") or 0)>0 else 0
+        bs["total_pnl"]+=t.get("pnl_inr") or 0
     return {"total_trades": len(trades),
-            "win_rate": round(len(wins)/len(pnls)*100, 1) if pnls else 0,
+            "win_rate": round(len(wins)/len(pnls)*100,1) if pnls else 0,
             "total_pnl": sum(pnls), "avg_pnl": round(sum(pnls)/len(pnls),0) if pnls else 0,
             "best_trade": max(pnls) if pnls else 0, "worst_trade": min(pnls) if pnls else 0,
             "by_strategy": by_strat}
 
 @app.get("/analytics/daily")
 def daily_pnl(user=Depends(get_current_user)):
-    trades = [t for t in _db["trades"].get(user["email"], []) if t["status"] == "CLOSED"]
+    trades = [t for t in _db["trades"].get(user["email"],[]) if t["status"]=="CLOSED"]
     by_date: dict = {}
     for t in trades:
-        d  = t.get("date",""); bd = by_date.setdefault(d, {"date": d,"pnl": 0,"trades": 0,"wins": 0})
-        bd["pnl"]    += t.get("pnl_inr") or 0
-        bd["trades"] += 1; bd["wins"] += 1 if (t.get("pnl_inr") or 0) > 0 else 0
+        d = t.get("date",""); bd = by_date.setdefault(d,{"date":d,"pnl":0,"trades":0,"wins":0})
+        bd["pnl"]+=t.get("pnl_inr") or 0; bd["trades"]+=1
+        bd["wins"]+=1 if (t.get("pnl_inr") or 0)>0 else 0
     return {"daily": sorted(by_date.values(), key=lambda x: x["date"])}
 
-
-# ── Paper trading ─────────────────────────────────────────────
 PAPER_INITIAL = 5_000_000
 
 def _get_paper(email):
@@ -740,13 +704,13 @@ def _get_paper(email):
 @app.get("/paper/account")
 def paper_account(user=Depends(get_current_user)):
     acc = _get_paper(user["email"]); pnl = acc["balance"] - acc["initial"]
-    return {**acc, "total_pnl": pnl, "pnl_pct": round(pnl/acc["initial"]*100, 2)}
+    return {**acc, "total_pnl": pnl, "pnl_pct": round(pnl/acc["initial"]*100,2)}
 
 @app.post("/paper/trade")
 def paper_trade(req: TradeLogRequest, user=Depends(get_current_user)):
     import uuid
     acc  = _get_paper(user["email"])
-    cost = {"NIFTY": 80000, "BANKNIFTY": 90000, "FINNIFTY": 50000}.get(req.instrument, 80000) * req.lots
+    cost = {"NIFTY":80000,"BANKNIFTY":90000,"FINNIFTY":50000}.get(req.instrument,80000)*req.lots
     if acc["balance"] < cost: raise HTTPException(400, "Insufficient paper capital")
     acc["balance"] -= cost
     trade = {"id": str(uuid.uuid4())[:8].upper(), "date": str(date.today()),
@@ -766,8 +730,6 @@ def leaderboard():
                       "pnl_pct": round(pnl/acc["initial"]*100,2), "trades": len(acc["trades"])})
     return {"leaderboard": sorted(board, key=lambda x: x["pnl"], reverse=True)[:20]}
 
-
-# ── Subscription ──────────────────────────────────────────────
 @app.get("/subscription/plans")
 def get_plans(): return {"plans": PLANS_LIST}
 
@@ -777,25 +739,19 @@ def upgrade_plan(plan: str, user=Depends(get_current_user)):
     _db["users"][user["email"]]["plan"] = plan
     return {"message": f"Upgraded to {plan}", "plan": plan}
 
-
-# ── WebSocket ─────────────────────────────────────────────────
 @app.websocket("/ws/signals")
 async def ws_signals(ws: WebSocket):
     await broadcaster.connect(ws)
     try:
-        # Send last 10 signals + current indices on connect
         for sig in (_db["signals"][-10:] if _db["signals"] else []):
-            await ws.send_text(json.dumps({"type": "signal", "data": sig}, default=str))
+            await ws.send_text(json.dumps({"type":"signal","data":sig}, default=str))
         if _latest_indices:
-            await ws.send_text(json.dumps({
-                "type": "indices_update", "indices": _latest_indices, "_ts": int(time.time())}))
-        await ws.send_text(json.dumps({"type": "status", "xls_live": _XLS_OK, "nse_live": _NSE_OK}))
+            await ws.send_text(json.dumps({"type":"indices_update","indices":_latest_indices,"_ts":int(time.time())}))
+        await ws.send_text(json.dumps({"type":"status","xls_live":_XLS_OK,"nse_live":_NSE_OK}))
         while True: await ws.receive_text()
     except WebSocketDisconnect:
         broadcaster.disconnect(ws)
 
-
-# ── Shorthand / health routes ─────────────────────────────────
 @app.get("/signals")
 def signals_shorthand(limit: int = 20, user=Depends(get_optional_user)):
     sigs = _db["signals"][-limit:][::-1]
@@ -807,44 +763,42 @@ def get_indices():
 
 @app.get("/movers")
 def get_movers():
-    eq = [s for s in _db["signals"] if s.get("market") == "EQUITY"]
+    eq = [s for s in _db["signals"] if s.get("market")=="EQUITY"]
     if not eq: eq = generate_equity_signals(top_n=20)
     by_sym: dict = {}
     for s in eq:
         sym = s.get("symbol")
         if sym and sym not in by_sym: by_sym[sym] = s
     sigs    = list(by_sym.values())
-    gainers = sorted([s for s in sigs if (s.get("change_pct") or 0) > 0],
+    gainers = sorted([s for s in sigs if (s.get("change_pct") or 0)>0],
                      key=lambda x: x.get("change_pct",0), reverse=True)[:6]
-    losers  = sorted([s for s in sigs if (s.get("change_pct") or 0) < 0],
+    losers  = sorted([s for s in sigs if (s.get("change_pct") or 0)<0],
                      key=lambda x: x.get("change_pct",0))[:6]
     return {"gainers": gainers, "losers": losers}
 
 @app.get("/analytics/pnl")
 def analytics_pnl(user=Depends(get_current_user)):
-    trades = [t for t in _db["trades"].get(user["email"],[]) if t["status"] == "CLOSED"]
+    trades = [t for t in _db["trades"].get(user["email"],[]) if t["status"]=="CLOSED"]
     by_date: dict = {}
     for t in trades:
-        d  = t.get("date",""); bd = by_date.setdefault(d, {"date": d,"pnl": 0,"trades": 0})
-        bd["pnl"] += t.get("pnl_inr") or 0; bd["trades"] += 1
+        d = t.get("date",""); bd = by_date.setdefault(d,{"date":d,"pnl":0,"trades":0})
+        bd["pnl"]+=t.get("pnl_inr") or 0; bd["trades"]+=1
     return {"pnl": sorted(by_date.values(), key=lambda x: x["date"])}
 
 @app.get("/trades")
 def trades_shorthand(user=Depends(get_current_user)):
-    trades = _db["trades"].get(user["email"], [])
+    trades = _db["trades"].get(user["email"],[])
     return {"trades": trades[-100:], "total": len(trades)}
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": "2.0.0", "users": len(_db["users"]),
-            "signals": len(_db["signals"]), "xls_live": _XLS_OK, "nse_live": _NSE_OK,
-            "timestamp": datetime.now().isoformat()}
+    return {"status":"ok","version":"2.0.0","users":len(_db["users"]),
+            "signals":len(_db["signals"]),"xls_live":_XLS_OK,"nse_live":_NSE_OK,
+            "timestamp":datetime.now().isoformat()}
 
 @app.get("/")
 def root():
-    return {"message": "AlgoTrade API v2.0", "docs": "/docs",
-            "health": "/health", "ws": "/ws/signals"}
-
+    return {"message":"AlgoTrade API v2.0","docs":"/docs","health":"/health","ws":"/ws/signals"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
