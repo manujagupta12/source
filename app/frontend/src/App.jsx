@@ -13,8 +13,6 @@ const MARKETS = [
   { id:"FINNIFTY",  label:"FIN NIFTY F&O", icon:"F", color:"#ff6b35",
     strategies:["S1 Calendar Spread","S2 Iron Condor"] },
   // FIX: added FO market so calendar signals are filterable
-  { id:"FO",        label:"F&O Calendar",  icon:"C", color:"#00d4ff",
-    strategies:["S1 CALENDAR"] },
   { id:"EQUITY",    label:"NSE Equity",    icon:"E", color:"#a78bfa",
     strategies:["E1 EMA Crossover","E2 VWAP Reversion","E3 ORB Breakout","E4 Gap Fill"] },
 ];
@@ -192,6 +190,13 @@ function sigClass(dir=""){
 function fmt(n,dec=2){ return n!=null&&n!==0?Number(n).toLocaleString("en-IN",{minimumFractionDigits:dec,maximumFractionDigits:dec}):"—"; }
 function chgColor(c){ return c>0?"var(--grn)":c<0?"var(--red)":"var(--muted)"; }
 function chgClass(c){ return c>0?"tick-up":c<0?"tick-dn":"tick-unch"; }
+function matchesMarket(sig, market) {
+  if (market === "ALL") return true;
+  if (market === "EQUITY") return sig.market === "EQUITY";
+  // NIFTY/BANKNIFTY/FINNIFTY: match by instrument field, not market field
+  const inst = (sig.instrument || sig.symbol || "").toUpperCase();
+  return inst === market;
+}
 
 function Login({onLogin}){
   const [email,setEmail]=useState("demo@algotrade.in");
@@ -424,13 +429,9 @@ function MoversPanel(){
 
 // FIX: SignalsTab now correctly routes FO/calendar signals
 function SignalsTab({signals,market,strategy,indices}){
-  const filtered=signals.filter(s=>{
-    if(market==="ALL") return true;
-    // FO market: match market="FO" OR no-market calendar signals
-    if(market==="FO") return s.market==="FO"||(!s.market&&s.strategy?.toUpperCase().includes("CALENDAR"));
-    if(s.market?.toUpperCase()===market) return true;
-    return false;
-  }).filter(s=>{
+const filtered = signals
+  .filter(s => matchesMarket(s, market))
+  .filter(s => {
     if(!strategy) return true;
     return s.strategy?.toUpperCase().includes(strategy.split(" ")[0].toUpperCase());
   });
