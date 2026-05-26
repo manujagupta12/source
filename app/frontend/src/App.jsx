@@ -4,26 +4,34 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 const API = "http://localhost:8000";
 const WS  = "ws://localhost:8000/ws/signals";
 
+// ── Market definitions — note: instrument field on FO signals matches these IDs
 const MARKETS = [
-  { id:"ALL",       label:"All Markets",    icon:"\u229e", color:"#00d4ff" },
+  { id:"ALL",       label:"All Markets",    icon:"⊞", color:"#00d4ff" },
   { id:"NIFTY",     label:"NIFTY 50 F&O",  icon:"N", color:"#00ff9d",
-    strategies:["S1 Calendar Spread","S2 Iron Condor","S3 Short Straddle","S4 0DTE Scalp"] },
+    strategies:["S1 Calendar Spread","S2 Iron Condor","S3 Short Straddle","S4 0DTE Scalp","S5 PCR Contrarian"] },
   { id:"BANKNIFTY", label:"BANK NIFTY F&O",icon:"B", color:"#f5c518",
-    strategies:["S1 Calendar Spread","S2 Iron Condor","S3 Short Straddle","S4 0DTE Scalp"] },
+    strategies:["S1 Calendar Spread","S2 Iron Condor","S3 Short Straddle","S4 0DTE Scalp","S5 PCR Contrarian"] },
   { id:"FINNIFTY",  label:"FIN NIFTY F&O", icon:"F", color:"#ff6b35",
-    strategies:["S1 Calendar Spread","S2 Iron Condor"] },
-  // FIX: added FO market so calendar signals are filterable
+    strategies:["S1 Calendar Spread","S2 Iron Condor","S5 PCR Contrarian"] },
   { id:"EQUITY",    label:"NSE Equity",    icon:"E", color:"#a78bfa",
     strategies:["E1 EMA Crossover","E2 VWAP Reversion","E3 ORB Breakout","E4 Gap Fill"] },
 ];
 
 const STRAT_INFO = {
-  S1:{color:"#00d4ff",tag:"NEUTRAL"}, S2:{color:"#00ff9d",tag:"NEUTRAL"},
-  S3:{color:"#f5c518",tag:"NEUTRAL"}, S4:{color:"#ff6b35",tag:"EXPIRY"},
-  S5:{color:"#22c55e",tag:"BULLISH"}, S6:{color:"#ef4444",tag:"BEARISH"},
-  E1:{color:"#a78bfa",tag:"MOMENTUM"},E2:{color:"#fb923c",tag:"MEAN REV"},
-  E3:{color:"#38bdf8",tag:"BREAKOUT"},E4:{color:"#e879f9",tag:"GAP FILL"},
+  S1:{color:"#00d4ff",tag:"NEUTRAL"},  S2:{color:"#00ff9d",tag:"NEUTRAL"},
+  S3:{color:"#f5c518",tag:"NEUTRAL"},  S4:{color:"#ff6b35",tag:"EXPIRY"},
+  S5:{color:"#22c55e",tag:"CONTRARIAN"},S6:{color:"#ef4444",tag:"BEARISH"},
+  E1:{color:"#a78bfa",tag:"MOMENTUM"}, E2:{color:"#fb923c",tag:"MEAN REV"},
+  E3:{color:"#38bdf8",tag:"BREAKOUT"}, E4:{color:"#e879f9",tag:"GAP FILL"},
   E5:{color:"#facc15",tag:"MOMENTUM"},
+};
+
+const PCR_ZONE_COLOR = {
+  OVERBOUGHT:    "#ff3d5a",
+  OVERSOLD:      "#00ff9d",
+  NEUTRAL:       "#5a7a9a",
+  BEARISH_WATCH: "#ff6b35",
+  BULLISH_WATCH: "#f5c518",
 };
 
 const CSS = `
@@ -38,7 +46,7 @@ const CSS = `
 body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;overflow-x:hidden}
 ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--br2);border-radius:2px}
 .app{display:flex;height:100vh;overflow:hidden}
-.sidebar{width:228px;min-width:228px;background:var(--s1);border-right:1px solid var(--br);display:flex;flex-direction:column;overflow-y:auto}
+.sidebar{width:232px;min-width:232px;background:var(--s1);border-right:1px solid var(--br);display:flex;flex-direction:column;overflow-y:auto}
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .ticker-bar{height:38px;background:var(--s1);border-bottom:1px solid var(--br);overflow:hidden;position:relative;flex-shrink:0}
 .ticker-inner{display:flex;align-items:center;height:100%;white-space:nowrap;animation:ticker 40s linear infinite}
@@ -91,6 +99,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .stat-lbl{font-size:9px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
 .stat-val{font-family:var(--mono);font-size:20px;font-weight:700}
 .stat-sub{font-size:10px;color:var(--muted);margin-top:3px}
+/* Strategy segregation section */
+.strat-seg{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:18px}
+.strat-seg-card{background:var(--s1);border:1px solid var(--br);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
+.strat-seg-name{font-size:9px;color:var(--muted);letter-spacing:.5px;margin-bottom:3px;text-transform:uppercase}
+.strat-seg-count{font-family:var(--mono);font-size:18px;font-weight:700}
 .sigs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
 .sig-card{background:var(--s1);border:1px solid var(--br);border-radius:11px;padding:15px;position:relative;overflow:hidden;transition:border-color .15s,transform .15s}
 .sig-card:hover{border-color:rgba(0,212,255,.25);transform:translateY(-1px)}
@@ -105,6 +118,52 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .sig-score-wrap{text-align:right}
 .sig-score{font-family:var(--mono);font-size:24px;font-weight:700;line-height:1}
 .sig-score-lbl{font-size:8px;color:var(--muted);margin-top:1px}
+/* PCR gauge */
+.pcr-gauge{background:var(--s2);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.pcr-gauge-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.pcr-val{font-family:var(--mono);font-size:22px;font-weight:700}
+.pcr-zone{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px}
+.pcr-bar-track{height:6px;background:var(--br2);border-radius:3px;position:relative;overflow:hidden}
+.pcr-bar-fill{height:100%;border-radius:3px;transition:width .3s}
+.pcr-labels{display:flex;justify-content:space-between;font-size:8px;color:var(--dim);font-family:var(--mono);margin-top:3px}
+.pcr-detail{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.pcr-stat{background:var(--s3);border-radius:5px;padding:5px 7px}
+.pcr-stat-k{font-size:7px;color:var(--muted);margin-bottom:2px}
+.pcr-stat-v{font-family:var(--mono);font-size:10px;font-weight:700}
+/* Paper trading */
+.paper-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.paper-balance{background:var(--s1);border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:16px;grid-column:span 3}
+.paper-bal-label{font-size:9px;color:var(--yel);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
+.paper-bal-val{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--yel)}
+.paper-bal-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.paper-trade-form{background:var(--s1);border:1px solid var(--br);border-radius:10px;padding:16px;margin-bottom:16px}
+.paper-form-title{font-size:11px;font-weight:600;color:var(--acc);margin-bottom:12px;font-family:var(--mono);letter-spacing:.5px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.form-field{display:flex;flex-direction:column;gap:4px}
+.form-lbl{font-size:9px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+.form-inp,.form-sel{background:var(--s2);border:1px solid var(--br);border-radius:6px;color:var(--text);font-family:var(--body);font-size:12px;padding:7px 10px;outline:none;transition:border .12s}
+.form-inp:focus,.form-sel:focus{border-color:var(--acc)}
+.btn{border:none;border-radius:7px;padding:9px 18px;font-family:var(--body);font-size:12px;font-weight:600;cursor:pointer;transition:opacity .12s}
+.btn:hover{opacity:.85}.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--acc);color:#000}
+.btn-danger{background:var(--red);color:#fff}
+.btn-ghost{background:var(--s2);color:var(--text);border:1px solid var(--br)}
+.paper-trade-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:center;background:var(--s2);border-radius:7px;padding:10px 12px;margin-bottom:6px;font-size:11px}
+.paper-status-open{color:var(--yel);font-family:var(--mono);font-size:9px;font-weight:700}
+.paper-status-closed{color:var(--muted);font-family:var(--mono);font-size:9px}
+/* Subscription */
+.plans-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.plan-card{background:var(--s1);border:1px solid var(--br);border-radius:12px;padding:20px;position:relative;transition:border-color .15s}
+.plan-card.current{border-color:rgba(0,212,255,.35);background:rgba(0,212,255,.04)}
+.plan-badge{font-size:8px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:3px;position:absolute;top:12px;right:12px;letter-spacing:.8px}
+.plan-name{font-family:var(--mono);font-size:14px;font-weight:700;margin-bottom:6px}
+.plan-price{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--acc);margin-bottom:4px}
+.plan-price span{font-size:10px;color:var(--muted)}
+.plan-features{list-style:none;margin:12px 0 16px;display:flex;flex-direction:column;gap:6px}
+.plan-features li{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.plan-features li::before{content:'✓';color:var(--grn);font-size:10px;font-weight:700;flex-shrink:0}
+.plan-features li.locked::before{content:'⊘';color:var(--dim)}
+.plan-features li.locked{color:var(--dim)}
 .eq-price-hero{background:var(--s2);border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
 .eq-sym{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--acc)}
 .eq-ltp{font-family:var(--mono);font-size:18px;font-weight:700}
@@ -167,7 +226,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .empty-s{font-size:11px}
 .card{background:var(--s1);border:1px solid var(--br);border-radius:10px;padding:16px}
 .card-lbl{font-size:9px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px}
-@media(max-width:1200px){.stats-grid{grid-template-columns:repeat(2,1fr)}.idx-strip{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1200px){.stats-grid{grid-template-columns:repeat(2,1fr)}.idx-strip{grid-template-columns:repeat(2,1fr)}.plans-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:900px){.sigs-grid{grid-template-columns:1fr}}
 @media(max-width:768px){.sidebar{display:none}}
 `;
@@ -188,14 +247,19 @@ function sigClass(dir=""){
   return "neut";
 }
 function fmt(n,dec=2){ return n!=null&&n!==0?Number(n).toLocaleString("en-IN",{minimumFractionDigits:dec,maximumFractionDigits:dec}):"—"; }
+function fmtINR(n){ return n!=null?`₹${Number(n).toLocaleString("en-IN")}`:"—"; }
 function chgColor(c){ return c>0?"var(--grn)":c<0?"var(--red)":"var(--muted)"; }
 function chgClass(c){ return c>0?"tick-up":c<0?"tick-dn":"tick-unch"; }
+
+// FIX: Correct market routing
+// FO signals use market="FO" but instrument=NIFTY/BANKNIFTY/FINNIFTY
+// Equity signals use market="EQUITY"
 function matchesMarket(sig, market) {
   if (market === "ALL") return true;
   if (market === "EQUITY") return sig.market === "EQUITY";
-  // NIFTY/BANKNIFTY/FINNIFTY: match by instrument field, not market field
+  // F&O markets: match by instrument field
   const inst = (sig.instrument || sig.symbol || "").toUpperCase();
-  return inst === market;
+  return inst === market && sig.market !== "EQUITY";
 }
 
 function Login({onLogin}){
@@ -277,6 +341,70 @@ function IndexStrip({indices}){
   );
 }
 
+// ── PCR Card ─────────────────────────────────────────────────────
+function PcrCard({sig}){
+  const pcr=sig.pcr_oi; const zone=sig.zone||"UNKNOWN";
+  const zoneCol=PCR_ZONE_COLOR[zone]||"var(--muted)";
+  // Normalise PCR to 0–100 bar width; clamp 0–2
+  const pcrClamped=Math.min(2,Math.max(0,pcr||1));
+  const barWidth=Math.round(pcrClamped/2*100);
+  const barColor=zone==="OVERSOLD"?"var(--grn)":zone==="OVERBOUGHT"?"var(--red)":"var(--yel)";
+  return(
+    <div className={`sig-card ${sigClass(sig.direction)}`}>
+      <div className="sig-top">
+        <div>
+          <div className="sig-strat" style={{color:"#22c55e"}}>S5 PCR CONTRARIAN</div>
+          <div className="sig-tags">
+            <span className="sig-tag" style={{background:"rgba(34,197,94,.12)",color:"#22c55e",border:"1px solid rgba(34,197,94,.25)"}}>F&amp;O</span>
+            <span className="sig-tag" style={{background:zoneCol+"20",color:zoneCol,border:`1px solid ${zoneCol}40`}}>{zone}</span>
+            <span className="sig-tag" style={{background:"rgba(0,212,255,.1)",color:"var(--acc)",border:"1px solid rgba(0,212,255,.2)"}}>OI DATA</span>
+          </div>
+        </div>
+        <div className="sig-score-wrap">
+          <div className="sig-score" style={{color:scoreColor(sig.score)}}>{sig.score}</div>
+          <div className="sig-score-lbl">SCORE</div>
+        </div>
+      </div>
+      <div className="pcr-gauge">
+        <div className="pcr-gauge-header">
+          <div>
+            <div style={{fontSize:9,color:"var(--muted)",marginBottom:3}}>PUT/CALL RATIO (OI)</div>
+            <div className="pcr-val" style={{color:zoneCol}}>{pcr?pcr.toFixed(3):"—"}</div>
+          </div>
+          <div className="pcr-zone" style={{background:zoneCol+"20",color:zoneCol,border:`1px solid ${zoneCol}40`}}>
+            {sig.signal||zone}
+          </div>
+        </div>
+        <div className="pcr-bar-track">
+          <div className="pcr-bar-fill" style={{width:barWidth+"%",background:barColor}}/>
+        </div>
+        <div className="pcr-labels">
+          <span>0.0 (GREED)</span>
+          <span>0.85</span>
+          <span>1.15</span>
+          <span>1.30+</span>
+          <span>2.0 (FEAR)</span>
+        </div>
+        <div className="pcr-detail">
+          <div className="pcr-stat"><div className="pcr-stat-k">PUT OI</div><div className="pcr-stat-v">{sig.total_put_oi?(sig.total_put_oi/1e5).toFixed(1)+"L":"—"}</div></div>
+          <div className="pcr-stat"><div className="pcr-stat-k">CALL OI</div><div className="pcr-stat-v">{sig.total_call_oi?(sig.total_call_oi/1e5).toFixed(1)+"L":"—"}</div></div>
+          <div className="pcr-stat"><div className="pcr-stat-k">PCR VOL</div><div className="pcr-stat-v">{sig.pcr_volume?sig.pcr_volume.toFixed(3):"—"}</div></div>
+          <div className="pcr-stat"><div className="pcr-stat-k">VIX</div><div className="pcr-stat-v">{sig.vix||"—"}</div></div>
+        </div>
+      </div>
+      <div className="sig-action">
+        <span style={{color:sig.direction==="LONG"?"var(--grn)":"var(--red)",fontWeight:700}}>{sig.direction}</span>
+        {" "}{sig.instrument} — PCR={pcr?pcr.toFixed(3):"—"}
+      </div>
+      {sig.reason&&<div className="sig-reason">{sig.reason}</div>}
+      <div className="sig-foot">
+        <div className="sig-src">📊 {sig.source||"PCR Strategy"}</div>
+        <span className={`risk-badge r${(sig.risk||"M")[0]}`}>{sig.risk||"MEDIUM"}</span>
+      </div>
+    </div>
+  );
+}
+
 function EqCard({sig}){
   const info=STRAT_INFO[skey(sig.strategy)]||{color:"var(--pur)",tag:""};
   const ltp=sig.ltp||sig.spot||0; const chg=sig.change_pct||0;
@@ -327,12 +455,10 @@ function EqCard({sig}){
   );
 }
 
-// FIX: updated FoCard to render calendar algo signals (market="FO")
 function FoCard({sig}){
-  const k    = skey(sig.strategy);
-  const info = STRAT_INFO[k]||{color:"var(--acc)",tag:"NEUTRAL"};
-  const spread = sig.spread??sig.entry_spread;
-  const isCalendar = sig.strategy?.toUpperCase().includes("CALENDAR");
+  const k=skey(sig.strategy); const info=STRAT_INFO[k]||{color:"var(--acc)",tag:"NEUTRAL"};
+  const spread=sig.spread??sig.entry_spread;
+  const isCalendar=sig.strategy?.toUpperCase().includes("CALENDAR");
   return(
     <div className={`sig-card ${sigClass(sig.direction)}`}>
       <div className="sig-top">
@@ -393,6 +519,7 @@ function FoCard({sig}){
 
 function SigCard({sig}){
   if(sig.market==="EQUITY") return <EqCard sig={sig}/>;
+  if(sig.strategy?.toUpperCase().includes("PCR")) return <PcrCard sig={sig}/>;
   return <FoCard sig={sig}/>;
 }
 
@@ -427,43 +554,65 @@ function MoversPanel(){
   );
 }
 
-// FIX: SignalsTab now correctly routes FO/calendar signals
-function SignalsTab({signals,market,strategy,indices}){
-const filtered = signals
-  .filter(s => matchesMarket(s, market))
-  .filter(s => {
-    if(!strategy) return true;
-    return s.strategy?.toUpperCase().includes(strategy.split(" ")[0].toUpperCase());
-  });
-
-  const foCount=signals.filter(s=>s.market==="FO"||(!s.market&&s.strategy?.toUpperCase().includes("CALENDAR"))).length;
-
+// ── Strategy Segregation Banner ───────────────────────────────────
+function StratSegBanner({signals}){
+  const groups=[
+    {id:"S1",label:"Calendar",  color:"#00d4ff"},
+    {id:"S2",label:"Iron Condor",color:"#00ff9d"},
+    {id:"S3",label:"Straddle",  color:"#f5c518"},
+    {id:"S4",label:"0DTE Scalp",color:"#ff6b35"},
+    {id:"S5",label:"PCR",       color:"#22c55e"},
+    {id:"EQ",label:"Equity",    color:"#a78bfa"},
+  ];
   return(
-    <div>
-      <IndexStrip indices={indices}/>
-      {market==="ALL"&&<MoversPanel/>}
-      {market==="FO"&&foCount===0&&(
-        <div className="empty">
-          <div className="empty-ico">📅</div>
-          <div className="empty-t">No F&amp;O Calendar signals yet</div>
-          <div className="empty-s">Start Calendaralgofinal.py — signals will appear here in real time</div>
-        </div>
-      )}
-      {filtered.length>0?(
-        <div className="sigs-grid">
-          {filtered.map((s,i)=><SigCard key={s.id||`${s.timestamp}-${i}`} sig={s}/>)}
-        </div>
-      ):(market!=="FO"||foCount>0)?(
-        <div className="empty">
-          <div className="empty-ico">📊</div>
-          <div className="empty-t">No signals for this filter</div>
-          <div className="empty-s">{market!=="ALL"?`${market} signals appear during market hours (9:15–15:30)`:"Waiting for NSE data — signals refresh every 30s"}</div>
-        </div>
-      ):null}
+    <div className="strat-seg">
+      {groups.map(g=>{
+        const count=g.id==="EQ"
+          ?signals.filter(s=>s.market==="EQUITY").length
+          :signals.filter(s=>skey(s.strategy)===g.id).length;
+        return(
+          <div key={g.id} className="strat-seg-card">
+            <div>
+              <div className="strat-seg-name">{g.label}</div>
+              <div className="strat-seg-count" style={{color:count>0?g.color:"var(--dim)"}}>{count}</div>
+            </div>
+            <div style={{width:3,height:32,borderRadius:2,background:count>0?g.color:"var(--br)"}}/>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
+function SignalsTab({signals,market,strategy,indices}){
+  const filtered=signals
+    .filter(s=>matchesMarket(s,market))
+    .filter(s=>{
+      if(!strategy) return true;
+      return s.strategy?.toUpperCase().includes(strategy.split(" ")[0].toUpperCase());
+    });
+  const foCount=signals.filter(s=>s.market==="FO"||(s.market&&s.market!=="EQUITY")).length;
+  return(
+    <div>
+      <IndexStrip indices={indices}/>
+      {market==="ALL"&&<MoversPanel/>}
+      {market==="ALL"&&<StratSegBanner signals={signals}/>}
+      {filtered.length>0?(
+        <div className="sigs-grid">
+          {filtered.map((s,i)=><SigCard key={s.id||`${s.timestamp}-${i}`} sig={s}/>)}
+        </div>
+      ):(
+        <div className="empty">
+          <div className="empty-ico">📊</div>
+          <div className="empty-t">No signals for this filter</div>
+          <div className="empty-s">{market!=="ALL"?`${market} signals appear during market hours 9:15–15:30`:"Waiting for NSE data — signals refresh every 30s"}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Analytics Tab ─────────────────────────────────────────────────
 function AnalyticsTab(){
   const [pnl,setPnl]=useState(null);
   useEffect(()=>{api("/analytics/pnl").then(setPnl).catch(()=>{});},[]);
@@ -476,9 +625,9 @@ function AnalyticsTab(){
     <div>
       <div className="stats-grid">
         {[
-          {l:"Total P&L",    v:`₹${fmt(pnl?.total_pnl||0,0)}`,    c:(pnl?.total_pnl||0)>=0?"var(--grn)":"var(--red)"},
-          {l:"Total Trades", v:pnl?.total_trades||0,                c:"var(--acc)"},
-          {l:"Winners",      v:pnl?.winning_trades||0,              c:"var(--grn)"},
+          {l:"Total P&L",    v:fmtINR(pnl?.total_pnl||0),    c:(pnl?.total_pnl||0)>=0?"var(--grn)":"var(--red)"},
+          {l:"Total Trades", v:pnl?.total_trades||0,          c:"var(--acc)"},
+          {l:"Winners",      v:pnl?.winning_trades||0,        c:"var(--grn)"},
           {l:"Win Rate",     v:pnl?.total_trades?Math.round((pnl.winning_trades/pnl.total_trades)*100)+"%":"—",c:"var(--yel)"},
         ].map((s,i)=>(
           <div key={i} className="stat-card">
@@ -496,7 +645,7 @@ function AnalyticsTab(){
               <XAxis dataKey="name" tick={{fontSize:8,fill:"var(--muted)"}}/>
               <YAxis tick={{fontSize:8,fill:"var(--muted)"}} tickFormatter={v=>`₹${(v/1000).toFixed(0)}k`}/>
               <Tooltip contentStyle={{background:"var(--s2)",border:"1px solid var(--br)",borderRadius:7,fontSize:11}}
-                formatter={v=>[`₹${Number(v).toLocaleString("en-IN")}`, "P&L"]}/>
+                formatter={v=>[`₹${Number(v).toLocaleString("en-IN")}`,"P&L"]}/>
               <Bar dataKey="pnl" fill="var(--acc)" radius={[4,4,0,0]}/>
             </BarChart>
           </ResponsiveContainer>
@@ -511,17 +660,19 @@ function AnalyticsTab(){
   );
 }
 
+// ── Trades Tab ────────────────────────────────────────────────────
 function TradesTab(){
-  const [tr,setTr]=useState({open_trades:[],closed_trades:[],total_pnl:0});
+  const [tr,setTr]=useState({trades:[],open_count:0,closed_count:0,total_pnl:0});
   useEffect(()=>{api("/trades").then(setTr).catch(()=>{});},[]);
-  const open=tr.open_trades||[];
+  const open=(tr.trades||[]).filter(t=>t.status==="OPEN");
+  const closed=(tr.trades||[]).filter(t=>t.status==="CLOSED").slice(-5);
   return(
     <div>
       <div className="stats-grid">
         {[
-          {l:"Total P&L",   v:`₹${fmt(tr.total_pnl||0,0)}`, c:(tr.total_pnl||0)>=0?"var(--grn)":"var(--red)"},
-          {l:"Open Trades", v:tr.open_count||open.length,    c:"var(--yel)"},
-          {l:"Closed",      v:tr.closed_count||0,            c:"var(--acc)"},
+          {l:"Total P&L",   v:fmtINR(tr.total_pnl||0), c:(tr.total_pnl||0)>=0?"var(--grn)":"var(--red)"},
+          {l:"Open Trades", v:tr.open_count||open.length,c:"var(--yel)"},
+          {l:"Closed",      v:tr.closed_count||0,        c:"var(--acc)"},
         ].map((s,i)=>(
           <div key={i} className="stat-card">
             <div className="stat-lbl">{s.l}</div>
@@ -529,16 +680,293 @@ function TradesTab(){
           </div>
         ))}
       </div>
-      {!open.length&&(
+      {open.length>0&&(
+        <div className="card" style={{marginBottom:16}}>
+          <div className="card-lbl">Open Positions</div>
+          {open.map(t=>(
+            <div className="paper-trade-row" key={t.id}>
+              <span style={{fontFamily:"var(--mono)",fontSize:11}}>{t.id}</span>
+              <span>{t.strategy?.slice(0,12)}</span>
+              <span style={{fontFamily:"var(--mono)"}}>{t.instrument}</span>
+              <span className="paper-status-open">OPEN</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {closed.length>0&&(
+        <div className="card">
+          <div className="card-lbl">Recent Closed</div>
+          {closed.map(t=>(
+            <div className="paper-trade-row" key={t.id}>
+              <span style={{fontFamily:"var(--mono)",fontSize:11}}>{t.id}</span>
+              <span>{t.instrument}</span>
+              <span style={{fontFamily:"var(--mono)",color:(t.pnl_inr||0)>=0?"var(--grn)":"var(--red)"}}>{fmtINR(t.pnl_inr)}</span>
+              <span className="paper-status-closed">CLOSED</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {!open.length&&!closed.length&&(
         <div className="empty"><div className="empty-ico">📋</div>
           <div className="empty-t">No trades logged yet</div>
-          <div className="empty-s">Signals tab → copy action → log trade</div>
+          <div className="empty-s">Use the Signals tab → action buttons to log trades</div>
         </div>
       )}
     </div>
   );
 }
 
+// ── Paper Trading Tab ─────────────────────────────────────────────
+function PaperTab(){
+  const [acc,setAcc]=useState(null);
+  const [form,setForm]=useState({strategy:"S1 CALENDAR",instrument:"BANKNIFTY",direction:"LONG",lots:1,entry_spread:0,notes:""});
+  const [closing,setClosing]=useState(null);
+  const [exitSpread,setExitSpread]=useState(0);
+  const [loading,setLoading]=useState(false);
+  const [msg,setMsg]=useState("");
+
+  const load=()=>api("/paper/account").then(setAcc).catch(()=>{});
+  useEffect(()=>{load();},[]);
+
+  const enter=async()=>{
+    setLoading(true);setMsg("");
+    try{
+      const r=await api("/paper/trade",{method:"POST",body:JSON.stringify(form)});
+      if(r.paper_trade){setMsg("✓ Paper trade entered: "+r.paper_trade.id);load();}
+      else setMsg(r.detail||"Error entering trade");
+    }catch(e){setMsg("Error: "+e.message);}
+    finally{setLoading(false);}
+  };
+
+  const close=async(tradeId)=>{
+    setLoading(true);setMsg("");
+    try{
+      const r=await api("/paper/close",{method:"POST",body:JSON.stringify({trade_id:tradeId,exit_spread:parseFloat(exitSpread)||0})});
+      if(r.pnl_inr!==undefined){setMsg(`✓ Closed | P&L: ₹${r.pnl_inr.toLocaleString("en-IN")}`);setClosing(null);load();}
+      else setMsg(r.detail||"Error closing trade");
+    }catch(e){setMsg("Error: "+e.message);}
+    finally{setLoading(false);}
+  };
+
+  const open=(acc?.trades||[]).filter(t=>t.status==="OPEN");
+  const closed=(acc?.trades||[]).filter(t=>t.status==="CLOSED");
+  const pnlCol=(acc?.total_pnl||0)>=0?"var(--grn)":"var(--red)";
+
+  return(
+    <div>
+      <div style={{marginBottom:16,padding:"14px 16px",background:"var(--s1)",border:"1px solid rgba(245,197,24,.2)",borderRadius:10}}>
+        <div className="paper-bal-label">📄 PAPER TRADING — Virtual Capital</div>
+        <div style={{display:"flex",alignItems:"baseline",gap:16,marginTop:6}}>
+          <div>
+            <div style={{fontSize:9,color:"var(--muted)",marginBottom:3}}>BALANCE</div>
+            <div style={{fontFamily:"var(--mono)",fontSize:24,fontWeight:700,color:"var(--yel)"}}>
+              {acc?fmtINR(acc.balance):"Loading…"}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"var(--muted)",marginBottom:3}}>TOTAL P&L</div>
+            <div style={{fontFamily:"var(--mono)",fontSize:18,fontWeight:700,color:pnlCol}}>
+              {acc?fmtINR(acc.total_pnl):"—"}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"var(--muted)",marginBottom:3}}>TRADES</div>
+            <div style={{fontFamily:"var(--mono)",fontSize:18,fontWeight:700,color:"var(--acc)"}}>
+              {acc?`${acc.open_count} open / ${acc.closed_count} closed`:"—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="paper-trade-form">
+        <div className="paper-form-title">+ ENTER PAPER TRADE</div>
+        {msg&&<div style={{fontSize:11,padding:"6px 10px",borderRadius:6,marginBottom:10,
+          background:msg.startsWith("✓")?"rgba(0,255,157,.08)":"rgba(255,61,90,.08)",
+          color:msg.startsWith("✓")?"var(--grn)":"var(--red)",
+          border:`1px solid ${msg.startsWith("✓")?"rgba(0,255,157,.2)":"rgba(255,61,90,.2)"}`}}>{msg}</div>}
+        <div className="form-row">
+          <div className="form-field">
+            <label className="form-lbl">Strategy</label>
+            <select className="form-sel" value={form.strategy} onChange={e=>setForm({...form,strategy:e.target.value})}>
+              <option>S1 CALENDAR</option><option>S2 IRON CONDOR</option>
+              <option>S3 SHORT STRADDLE</option><option>S4 0DTE SCALP</option>
+              <option>S5 PCR CONTRARIAN</option>
+            </select>
+          </div>
+          <div className="form-field">
+            <label className="form-lbl">Instrument</label>
+            <select className="form-sel" value={form.instrument} onChange={e=>setForm({...form,instrument:e.target.value})}>
+              <option>BANKNIFTY</option><option>NIFTY</option><option>FINNIFTY</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-field">
+            <label className="form-lbl">Direction</label>
+            <select className="form-sel" value={form.direction} onChange={e=>setForm({...form,direction:e.target.value})}>
+              <option>LONG</option><option>SHORT</option>
+            </select>
+          </div>
+          <div className="form-field">
+            <label className="form-lbl">Lots</label>
+            <input className="form-inp" type="number" min={1} max={50} value={form.lots}
+              onChange={e=>setForm({...form,lots:parseInt(e.target.value)||1})}/>
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-field">
+            <label className="form-lbl">Entry Spread (pts)</label>
+            <input className="form-inp" type="number" step="0.5" value={form.entry_spread}
+              onChange={e=>setForm({...form,entry_spread:parseFloat(e.target.value)||0})}/>
+          </div>
+          <div className="form-field">
+            <label className="form-lbl">Notes</label>
+            <input className="form-inp" value={form.notes}
+              onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Optional…"/>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={enter} disabled={loading}>
+          {loading?"Entering…":"Enter Paper Trade"}
+        </button>
+      </div>
+
+      {open.length>0&&(
+        <div className="card" style={{marginBottom:14}}>
+          <div className="card-lbl">Open Paper Positions</div>
+          {open.map(t=>(
+            <div key={t.id} style={{marginBottom:8}}>
+              <div className="paper-trade-row">
+                <span style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--acc)"}}>{t.id}</span>
+                <span>{t.strategy?.slice(0,14)}</span>
+                <span style={{fontFamily:"var(--mono)"}}>{t.instrument} ×{t.lots}</span>
+                <span className="paper-status-open">📄 PAPER</span>
+                <button className="btn btn-ghost" style={{fontSize:10,padding:"4px 10px"}}
+                  onClick={()=>setClosing(closing===t.id?null:t.id)}>Close</button>
+              </div>
+              {closing===t.id&&(
+                <div style={{display:"flex",gap:8,padding:"8px 0 4px",alignItems:"center"}}>
+                  <input className="form-inp" type="number" step="0.5" placeholder="Exit spread"
+                    style={{width:140}} value={exitSpread}
+                    onChange={e=>setExitSpread(e.target.value)}/>
+                  <button className="btn btn-danger" style={{fontSize:11}} onClick={()=>close(t.id)}
+                    disabled={loading}>Confirm Close</button>
+                  <button className="btn btn-ghost" style={{fontSize:11}} onClick={()=>setClosing(null)}>Cancel</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {closed.length>0&&(
+        <div className="card">
+          <div className="card-lbl">Closed Paper Trades</div>
+          {closed.slice(-8).reverse().map(t=>(
+            <div className="paper-trade-row" key={t.id}>
+              <span style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--dim)"}}>{t.id}</span>
+              <span>{t.instrument}</span>
+              <span style={{fontFamily:"var(--mono)",fontWeight:700,
+                color:(t.pnl_inr||0)>=0?"var(--grn)":"var(--red)"}}>
+                {fmtINR(t.pnl_inr)}
+              </span>
+              <span style={{fontFamily:"var(--mono)",fontSize:9,
+                color:(t.pnl_pts||0)>=0?"var(--grn)":"var(--red)"}}>
+                {t.pnl_pts!=null?`${t.pnl_pts>0?"+":""}${t.pnl_pts}pts`:""}
+              </span>
+              <span className="paper-status-closed">CLOSED</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Subscription Tab ──────────────────────────────────────────────
+function SubscriptionTab({user}){
+  const [plans,setPlans]=useState([]);
+  const [status,setStatus]=useState(null);
+  const [loading,setLoading]=useState("");
+  const [msg,setMsg]=useState("");
+
+  useEffect(()=>{
+    api("/subscription/plans").then(d=>setPlans(d.plans||[])).catch(()=>{});
+    api("/subscription/status").then(setStatus).catch(()=>{});
+  },[]);
+
+  const upgrade=async(planId)=>{
+    setLoading(planId);setMsg("");
+    try{
+      const r=await api("/subscription/upgrade",{method:"POST",body:JSON.stringify({plan:planId})});
+      if(r.plan){setMsg(`✓ Upgraded to ${r.plan}`);api("/subscription/status").then(setStatus);}
+      else setMsg(r.detail||"Upgrade failed");
+    }catch(e){setMsg("Error: "+e.message);}
+    finally{setLoading("");}
+  };
+
+  const currentPlan=status?.plan||user?.plan||"free";
+  const BADGE_COL={free:"#5a7a9a",starter:"#00ff9d",pro:"#00d4ff",elite:"#f5c518"};
+
+  return(
+    <div>
+      <div style={{marginBottom:20,padding:"14px 16px",background:"var(--s1)",border:"1px solid var(--br)",borderRadius:10}}>
+        <div style={{fontSize:9,color:"var(--muted)",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:6}}>CURRENT PLAN</div>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{fontFamily:"var(--mono)",fontSize:20,fontWeight:700,color:BADGE_COL[currentPlan]||"var(--acc)"}}>
+            {currentPlan.toUpperCase()}
+          </div>
+          {status?.tier&&(
+            <div style={{fontSize:10,color:"var(--muted)"}}>
+              {status.tier.live?"✓ Live signals":"⚠ Delayed 15min"} &nbsp;·&nbsp;
+              {status.tier.strategies} strategies &nbsp;·&nbsp;
+              {status.tier.instruments} instruments
+            </div>
+          )}
+        </div>
+      </div>
+      {msg&&<div style={{fontSize:11,padding:"8px 12px",borderRadius:7,marginBottom:14,
+        background:msg.startsWith("✓")?"rgba(0,255,157,.08)":"rgba(255,61,90,.08)",
+        color:msg.startsWith("✓")?"var(--grn)":"var(--red)",
+        border:`1px solid ${msg.startsWith("✓")?"rgba(0,255,157,.2)":"rgba(255,61,90,.2)"}`}}>{msg}</div>}
+      <div className="plans-grid">
+        {plans.map(p=>{
+          const isCurrent=p.id===currentPlan;
+          const bc=BADGE_COL[p.id]||"var(--acc)";
+          return(
+            <div key={p.id} className={`plan-card ${isCurrent?"current":""}`}>
+              <div className="plan-badge" style={{background:bc+"20",color:bc,border:`1px solid ${bc}30`}}>
+                {isCurrent?"ACTIVE":p.badge}
+              </div>
+              <div className="plan-name" style={{color:bc}}>{p.name}</div>
+              <div className="plan-price">
+                {p.price===0?"FREE":`₹${p.price.toLocaleString("en-IN")}`}
+                {p.price>0&&<span>/mo</span>}
+              </div>
+              <ul className="plan-features">
+                {p.features.map((f,i)=>(
+                  <li key={i} className={f.startsWith("⊘")?"locked":""}>
+                    {f.replace(/^[✓⊘]\s*/,"")}
+                  </li>
+                ))}
+              </ul>
+              {!isCurrent&&(
+                <button className="btn btn-primary" style={{width:"100%",fontSize:11}}
+                  onClick={()=>upgrade(p.id)} disabled={loading===p.id}>
+                  {loading===p.id?"Upgrading…":"Upgrade"}
+                </button>
+              )}
+              {isCurrent&&(
+                <div style={{textAlign:"center",fontSize:10,color:bc,fontFamily:"var(--mono)",padding:"9px 0",fontWeight:700}}>CURRENT PLAN</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────
 export default function App(){
   const [user,setUser]      =useState(()=>localStorage.getItem("tok")?{tok:true}:null);
   const [signals,setSigs]   =useState([]);
@@ -554,7 +982,6 @@ export default function App(){
 
   useEffect(()=>{const t=setInterval(()=>setClock(new Date()),100);return()=>clearInterval(t);},[]);
 
-  // WebSocket
   useEffect(()=>{
     if(!user) return;
     const conn=()=>{
@@ -565,21 +992,15 @@ export default function App(){
       ws.onmessage=e=>{
         try{
           const d=JSON.parse(e.data);
-
-          // F&O + calendar signals (single)
           if(d.type==="signal"&&d.data){
             setSigs(prev=>[d.data,...prev].slice(0,300));
             if(d.data.regime) setRegime(r=>({...r,regime:d.data.regime,vix:d.data.vix}));
             return;
           }
-
-          // Equity signals batch
           if(d.type==="equity_signals"&&d.signals?.length){
             setSigs(prev=>[...d.signals,...prev.filter(s=>s.market!=="EQUITY")].slice(0,300));
             return;
           }
-
-          // FIX: live index push from signal_loop every 10s
           if(d.type==="indices_update"&&d.indices?.length){
             setIdxs(prev=>d.indices.map((idx,i)=>({
               ...idx,
@@ -588,7 +1009,6 @@ export default function App(){
             })));
             return;
           }
-
           if(d.type==="regime"){ setRegime(r=>({...r,...d})); return; }
           if(d.signals?.length) setSigs(d.signals);
           if(d.regime)          setRegime(r=>({...r,...d.regime}));
@@ -599,7 +1019,6 @@ export default function App(){
     return()=>wsRef.current?.close();
   },[user]);
 
-  // Initial REST fetch
   useEffect(()=>{
     if(!user) return;
     api("/signals").then(d=>{ if(d.signals?.length) setSigs(d.signals); }).catch(()=>{});
@@ -609,7 +1028,6 @@ export default function App(){
     }).catch(()=>{});
   },[user]);
 
-  // FIX: Index REST polling every 15s (fallback when WS not pushing)
   useEffect(()=>{
     if(!user) return;
     const iv=setInterval(()=>{
@@ -624,7 +1042,6 @@ export default function App(){
     return()=>clearInterval(iv);
   },[user]);
 
-  // Equity refresh every 45s
   useEffect(()=>{
     if(!user) return;
     const iv=setInterval(()=>{
@@ -643,10 +1060,19 @@ export default function App(){
   const bull=signals.filter(s=>["BUY","BULL","LONG"].some(k=>s.direction?.toUpperCase().includes(k))).length;
   const bear=signals.filter(s=>["SELL","BEAR","SHORT","EXIT"].some(k=>s.direction?.toUpperCase().includes(k))).length;
   const neut=signals.length-bull-bear;
-  const foCount=signals.filter(s=>s.market==="FO"||(!s.market&&s.strategy?.toUpperCase().includes("CALENDAR"))).length;
+  const pcrCount=signals.filter(s=>s.strategy?.toUpperCase().includes("PCR")).length;
+  const foCount=signals.filter(s=>s.market==="FO"||(s.market&&s.market!=="EQUITY")).length;
 
   const selMkt=m=>{setMkt(m);setStrat(null);setOpenMkt(openMkt===m?null:m);};
   const selStrat=s=>{setStrat(strat===s?null:s);};
+
+  const TABS=[
+    {id:"signals",lbl:`Signals (${signals.length})`},
+    {id:"trades",lbl:"Trades"},
+    {id:"paper",lbl:"Paper Trade"},
+    {id:"analytics",lbl:"Analytics"},
+    {id:"subscription",lbl:"Subscription"},
+  ];
 
   return(
     <><style>{CSS}</style>
@@ -658,7 +1084,13 @@ export default function App(){
         </div>
         <nav className="sb-nav">
           <div className="nav-sect">Navigate</div>
-          {[{id:"signals",ico:"◈",lbl:"Live Signals"},{id:"trades",ico:"⊕",lbl:"My Trades"},{id:"analytics",ico:"◇",lbl:"Analytics"}].map(n=>(
+          {[
+            {id:"signals",ico:"◈",lbl:"Live Signals"},
+            {id:"trades",ico:"⊕",lbl:"My Trades"},
+            {id:"paper",ico:"📄",lbl:"Paper Trade"},
+            {id:"analytics",ico:"◇",lbl:"Analytics"},
+            {id:"subscription",ico:"★",lbl:"Subscription"},
+          ].map(n=>(
             <div key={n.id} className={`nav-it ${tab===n.id?"act":""}`} onClick={()=>setTab(n.id)}>
               <span className="nav-ico">{n.ico}</span>{n.lbl}
             </div>
@@ -668,12 +1100,7 @@ export default function App(){
             <div key={m.id}>
               <div className={`mkt-btn ${mkt===m.id?"act":""}`} onClick={()=>selMkt(m.id)}>
                 <div className="mkt-badge" style={{background:m.color+"20",color:m.color}}>{m.icon}</div>
-                <span className="mkt-name" style={{color:mkt===m.id?m.color:undefined}}>
-                  {m.label}
-                  {m.id==="FO"&&foCount>0&&(
-                    <span style={{marginLeft:5,fontSize:8,background:"rgba(0,212,255,.15)",color:"var(--acc)",padding:"1px 5px",borderRadius:3}}>{foCount}</span>
-                  )}
-                </span>
+                <span className="mkt-name" style={{color:mkt===m.id?m.color:undefined}}>{m.label}</span>
                 {m.id!=="ALL"&&<span className={`chev ${openMkt===m.id?"open":""}`}>▾</span>}
               </div>
               {openMkt===m.id&&m.strategies&&(
@@ -695,6 +1122,7 @@ export default function App(){
           <div className="nav-sect">Data Sources</div>
           <div className="feed-row feed-ok">◉ NSE Direct API</div>
           <div className="feed-row feed-ok">◉ MultiTrade Feed (.xls)</div>
+          <div className="feed-row" style={{color:"#22c55e"}}>◉ NSE OI PCR Feed</div>
           <div style={{marginTop:"auto",padding:"12px 8px",borderTop:"1px solid var(--br)"}}>
             <div className="nav-it" onClick={()=>{localStorage.removeItem("tok");setUser(null);}}>
               <span className="nav-ico">↩</span>Logout
@@ -712,11 +1140,12 @@ export default function App(){
           </div>
           <div className="src-pill">
             <div className="pulse" style={{background:"var(--grn)",width:5,height:5}}/>
-            NSE Direct + MultiTrade
+            NSE Direct + MultiTrade + PCR
           </div>
           <div className="topbar-right">
             {regime?.vix!=null&&<div className="badge" style={{color:rCol}}>VIX {regime.vix}</div>}
-            <div className={`badge`} style={{display:"flex",alignItems:"center",gap:5,color:wsStatus==="live"?"var(--grn)":wsStatus==="connecting"?"var(--yel)":"var(--red)"}}>
+            {pcrCount>0&&<div className="badge" style={{color:"#22c55e",borderColor:"rgba(34,197,94,.2)"}}>PCR {pcrCount}</div>}
+            <div className="badge" style={{display:"flex",alignItems:"center",gap:5,color:wsStatus==="live"?"var(--grn)":wsStatus==="connecting"?"var(--yel)":"var(--red)"}}>
               {wsStatus==="live"?<><span style={{width:6,height:6,borderRadius:"50%",background:"var(--grn)",display:"inline-block",animation:"pulse 1s infinite"}}/>LIVE</>
                :wsStatus==="connecting"?"◌ CONN…":"⚠ RECONN"}
             </div>
@@ -728,14 +1157,14 @@ export default function App(){
         </header>
 
         <div className="tabs">
-          {[{id:"signals",lbl:`Signals (${signals.length})`},{id:"trades",lbl:"Trades"},{id:"analytics",lbl:"Analytics"}].map(t=>(
+          {TABS.map(t=>(
             <div key={t.id} className={`tab ${tab===t.id?"act":""}`} onClick={()=>setTab(t.id)}>{t.lbl}</div>
           ))}
           {tab==="signals"&&signals.length>0&&(
             <div className="tab-right">
               <span className="count-pill" style={{background:"rgba(0,255,157,.08)",color:"var(--grn)"}}>▲ {bull}</span>
-              <span className="count-pill" style={{background:"rgba(255,61,90,.08)", color:"var(--red)"}}>▼ {bear}</span>
-              <span className="count-pill" style={{background:"rgba(0,212,255,.08)", color:"var(--acc)"}}>◆ {neut}</span>
+              <span className="count-pill" style={{background:"rgba(255,61,90,.08)",color:"var(--red)"}}>▼ {bear}</span>
+              <span className="count-pill" style={{background:"rgba(0,212,255,.08)",color:"var(--acc)"}}>◆ {neut}</span>
             </div>
           )}
         </div>
@@ -745,10 +1174,10 @@ export default function App(){
             <>
               <div className="stats-grid" style={{marginBottom:16}}>
                 {[
-                  {l:"Total Signals",    v:signals.length,                                    c:"var(--acc)"},
-                  {l:"F&O Signals",      v:signals.filter(s=>s.market!=="EQUITY").length,     c:"var(--grn)"},
-                  {l:"Calendar Signals", v:foCount,                                            c:"var(--acc)"},
-                  {l:"Equity Signals",   v:signals.filter(s=>s.market==="EQUITY").length,     c:"var(--pur)"},
+                  {l:"Total Signals",  v:signals.length,                                   c:"var(--acc)"},
+                  {l:"F&O Signals",    v:foCount,                                           c:"var(--grn)"},
+                  {l:"PCR Signals",    v:pcrCount,                                          c:"#22c55e"},
+                  {l:"Equity Signals", v:signals.filter(s=>s.market==="EQUITY").length,    c:"var(--pur)"},
                 ].map((s,i)=>(
                   <div key={i} className="stat-card">
                     <div className="stat-lbl">{s.l}</div>
@@ -760,8 +1189,10 @@ export default function App(){
               <SignalsTab signals={signals} market={mkt} strategy={strat} indices={indices}/>
             </>
           )}
-          {tab==="analytics"&&<AnalyticsTab/>}
-          {tab==="trades"   &&<TradesTab/>}
+          {tab==="analytics"   &&<AnalyticsTab/>}
+          {tab==="trades"      &&<TradesTab/>}
+          {tab==="paper"       &&<PaperTab/>}
+          {tab==="subscription"&&<SubscriptionTab user={user}/>}
         </div>
       </div>
     </div>
