@@ -1,0 +1,24 @@
+# AlgoTrade Backend — Python dependencies
+# Pin major versions for reproducible Docker builds
+
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+requests==2.32.3
+python-multipart==0.0.20
+
+# Auth (optional — falls back to base64 if not installed)
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.1
+
+# Data processing for XLS feed
+openpyxl==3.1.5
+xlrd==2.0.1
+pandas==2.2.3
+numpy==2.1.3
+
+# HTTP client for NSE
+httpx==0.28.1
+
+# Logging
+python-dotenv==1.0.1

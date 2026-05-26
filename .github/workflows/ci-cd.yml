@@ -1,0 +1,231 @@
+# ════════════════════════════════════════════════════════════════
+# AlgoTrade CI/CD Pipeline
+# Triggers: push/PR to main branch
+#
+# Jobs:
+#  1. lint-test   — Python lint + JS build validation
+#  2. build-push  — Build Docker images, push to GHCR
+#  3. release     — Tag v1.x.x release on version bump
+# ════════════════════════════════════════════════════════════════
+name: AlgoTrade CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags:    ['v*.*.*']
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND:  ghcr.io/${{ github.repository_owner }}/algotrade-backend
+  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/algotrade-frontend
+
+jobs:
+
+  # ────────────────────────────────────────────────────────────────
+  lint-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python lint
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python deps
+        run: |
+          pip install -r app/backend/requirements.txt
+          pip install flake8
+
+      - name: Lint backend (flake8)
+        run: |
+          flake8 app/backend/main.py algo/pcr_strategy.py \
+            --max-line-length=120 \
+            --ignore=E302,E303,E501,W503 \
+            --count
+
+      - name: Validate backend imports
+        run: |
+          cd app/backend
+          python -c "import sys; sys.path.insert(0,'../../algo'); import main; print('Backend OK')"
+
+      # JS build validation
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci --prefer-offline
+        working-directory: app/frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: app/frontend
+        env:
+          VITE_API_URL: http://localhost:8000
+          VITE_WS_URL:  ws://localhost:8000
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: app/frontend/dist/
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────────
+  build-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: lint-test
+    # Only push on main branch or tag pushes (not PRs)
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Compute image tags (latest + git SHA + semver tag if present)
+      - name: Extract metadata — Backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BACKEND }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract metadata — Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_FRONTEND }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # Build & push backend
+      - name: Build and push — Backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      # Build & push frontend
+      - name: Build and push — Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VITE_API_URL=http://localhost:8000
+            VITE_WS_URL=ws://localhost:8000
+
+      - name: Image digest summary
+        run: |
+          echo "### 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | Tags |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend  | ${{ steps.meta-backend.outputs.tags }}  |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ steps.meta-frontend.outputs.tags }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ────────────────────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-push
+    # Only on semver tags
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+      - name: Create release archive
+        run: |
+          tar -czf algotrade-${{ github.ref_name }}.tar.gz \
+            docker-compose.yml docker-compose.prod.yml \
+            Dockerfile.backend Dockerfile.frontend nginx.conf \
+            app/backend/requirements.txt .env.example
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "AlgoTrade ${{ github.ref_name }} — NSE F&O Signal Platform"
+          body: |
+            ## 🚀 AlgoTrade ${{ github.ref_name }}
+
+            NSE F&O Signal Platform — Version 1 Release
+
+            ### What's included
+            - Calendar Spread (S1), Iron Condor (S2), Short Straddle (S3), 0DTE Scalp (S4)
+            - PCR Contrarian strategy (S5) with live NSE OI data
+            - Equity strategies (EMA Crossover, VWAP Reversion, ORB Breakout, Gap Fill)
+            - Paper trading with virtual ₹50L capital
+            - Real-time WebSocket signals + index ticker
+            - Subscription tiers (Free / Starter / Pro / Elite)
+            - Full Docker + docker-compose deployment
+            - GitHub Actions CI/CD pipeline
+
+            ### Quick Start
+            ```bash
+            docker compose up --build
+            # Open http://localhost:80
+            # Login: demo@algotrade.in / demo123
+            ```
+
+            ### Docker Images (GHCR)
+            ```
+            ghcr.io/${{ github.repository_owner }}/algotrade-backend:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/algotrade-frontend:${{ github.ref_name }}
+            ```
+          files: algotrade-${{ github.ref_name }}.tar.gz
+          draft: false
+          prerelease: false

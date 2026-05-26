@@ -1,0 +1,67 @@
+# ════════════════════════════════════════════════════════════════
+# AlgoTrade NSE F&O Signal Platform — v1.0.0
+# One-command launch:  docker compose up --build
+# Production:          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ════════════════════════════════════════════════════════════════
+version: '3.9'
+
+services:
+
+  # ── FastAPI Signal Engine ────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: algotrade-backend:1.0.0
+    container_name: algotrade-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"           # exposed for direct API access / dev
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-algotrade-dev-secret-CHANGE-IN-PROD}
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/data:ro         # MultiTrade XLS feed (read-only mount)
+      - backend-logs:/app/logs
+    networks:
+      - algotrade-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── React/Vite Frontend (nginx) ────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - VITE_API_URL=http://localhost:8000
+        - VITE_WS_URL=ws://localhost:8000
+    image: algotrade-frontend:1.0.0
+    container_name: algotrade-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"                # Main web port
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - algotrade-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  backend-logs:
+    driver: local
+
+networks:
+  algotrade-net:
+    driver: bridge
