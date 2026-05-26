@@ -17,21 +17,17 @@ const MARKETS = [
 ];
 
 const STRAT_INFO = {
-  S1:{color:"#00d4ff",tag:"NEUTRAL"},  S2:{color:"#00ff9d",tag:"NEUTRAL"},
-  S3:{color:"#f5c518",tag:"NEUTRAL"},  S4:{color:"#ff6b35",tag:"EXPIRY"},
+  S1:{color:"#00d4ff",tag:"NEUTRAL"},   S2:{color:"#00ff9d",tag:"NEUTRAL"},
+  S3:{color:"#f5c518",tag:"NEUTRAL"},   S4:{color:"#ff6b35",tag:"EXPIRY"},
   S5:{color:"#22c55e",tag:"CONTRARIAN"},S6:{color:"#ef4444",tag:"BEARISH"},
-  E1:{color:"#a78bfa",tag:"MOMENTUM"}, E2:{color:"#fb923c",tag:"MEAN REV"},
-  E3:{color:"#38bdf8",tag:"BREAKOUT"}, E4:{color:"#e879f9",tag:"GAP FILL"},
+  E1:{color:"#a78bfa",tag:"MOMENTUM"},  E2:{color:"#fb923c",tag:"MEAN REV"},
+  E3:{color:"#38bdf8",tag:"BREAKOUT"},  E4:{color:"#e879f9",tag:"GAP FILL"},
   E5:{color:"#facc15",tag:"MOMENTUM"},
 };
 
 const PCR_ZONE_COLOR = {
-  OVERBOUGHT:    "#ff3d5a",
-  OVERSOLD:      "#00ff9d",
-  NEUTRAL:       "#5a7a9a",
-  BEARISH_WATCH: "#ff6b35",
-  BULLISH_WATCH: "#f5c518",
-  UNKNOWN:       "#5a7a9a",
+  OVERBOUGHT:"#ff3d5a", OVERSOLD:"#00ff9d",
+  NEUTRAL:"#5a7a9a", BEARISH_WATCH:"#ff6b35", BULLISH_WATCH:"#f5c518", UNKNOWN:"#5a7a9a",
 };
 
 const CSS = `
@@ -54,7 +50,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 .tick-item{display:inline-flex;align-items:center;gap:8px;padding:0 20px;border-right:1px solid var(--br);height:100%;font-family:var(--mono);font-size:10px}
 .tick-label{color:var(--muted);font-size:9px;letter-spacing:.5px}
-.tick-val{font-weight:700;font-size:11px;transition:color .2s}
+.tick-val{font-weight:700;font-size:11px}
 .tick-chg{font-size:9px;padding:1px 5px;border-radius:3px}
 .tick-up{color:var(--grn)}.tick-dn{color:var(--red)}.tick-unch{color:var(--muted)}
 .topbar{height:52px;background:var(--s1);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 18px;gap:12px;flex-shrink:0}
@@ -73,18 +69,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .nav-it:hover{background:var(--s2);color:var(--text)}
 .nav-it.act{background:rgba(0,212,255,.07);color:var(--acc);border-color:rgba(0,212,255,.12)}
 .nav-ico{width:16px;text-align:center;font-size:11px}
-/* Market button: name area filters signals, chevron area toggles dropdown */
-.mkt-btn{display:flex;align-items:center;gap:9px;padding:4px 6px 4px 10px;border-radius:7px;font-size:12px;transition:all .12s;margin-bottom:1px;border:1px solid transparent}
+.mkt-btn{display:flex;align-items:center;gap:0;padding:4px 6px 4px 10px;border-radius:7px;font-size:12px;transition:all .12s;margin-bottom:1px;border:1px solid transparent}
 .mkt-btn:hover{background:var(--s2)}
 .mkt-btn.act{background:rgba(0,212,255,.07);border-color:rgba(0,212,255,.12)}
 .mkt-label-area{display:flex;align-items:center;gap:9px;flex:1;cursor:pointer;padding:4px 0}
 .mkt-badge{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:var(--mono);flex-shrink:0}
 .mkt-name{font-size:11px;font-weight:500;flex:1}
-.mkt-chev-btn{cursor:pointer;padding:6px 8px;border-radius:5px;color:var(--dim);font-size:8px;transition:all .12s;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.mkt-chev-btn{cursor:pointer;padding:6px 8px;border-radius:5px;font-size:8px;transition:all .12s;flex-shrink:0;display:flex;align-items:center;color:var(--dim)}
 .mkt-chev-btn:hover{background:rgba(0,212,255,.12);color:var(--acc)}
 .chev{transition:transform .18s;display:inline-block}
 .chev.open{transform:rotate(180deg)}
-.strat-list{padding:3px 6px 3px 30px;overflow:hidden}
+.strat-list{padding:2px 6px 4px 30px;overflow:hidden}
 .strat-it{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:5px;cursor:pointer;font-size:10px;color:var(--muted);transition:all .12s;margin-bottom:1px}
 .strat-it:hover{background:var(--s2);color:var(--text)}
 .strat-it.act{color:var(--text);background:rgba(0,212,255,.05)}
@@ -103,10 +98,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .stat-lbl{font-size:9px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
 .stat-val{font-family:var(--mono);font-size:20px;font-weight:700}
 .stat-sub{font-size:10px;color:var(--muted);margin-top:3px}
-.strat-seg{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:18px}
-.strat-seg-card{background:var(--s1);border:1px solid var(--br);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
+.strat-seg{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:18px}
+.strat-seg-card{background:var(--s1);border:1px solid var(--br);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:border-color .12s}
+.strat-seg-card:hover{border-color:var(--br2)}
 .strat-seg-name{font-size:9px;color:var(--muted);letter-spacing:.5px;margin-bottom:3px;text-transform:uppercase}
 .strat-seg-count{font-family:var(--mono);font-size:18px;font-weight:700}
+.filter-crumb{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:7px 12px;background:var(--s2);border:1px solid var(--br2);border-radius:7px;font-size:10px;font-family:var(--mono)}
+.filter-crumb-clear{cursor:pointer;color:var(--red);font-size:10px;margin-left:auto;padding:1px 6px;border-radius:4px;border:1px solid rgba(255,61,90,.2);background:rgba(255,61,90,.06)}
 .sigs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
 .sig-card{background:var(--s1);border:1px solid var(--br);border-radius:11px;padding:15px;position:relative;overflow:hidden;transition:border-color .15s,transform .15s}
 .sig-card:hover{border-color:rgba(0,212,255,.25);transform:translateY(-1px)}
@@ -121,15 +119,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .sig-score-wrap{text-align:right}
 .sig-score{font-family:var(--mono);font-size:24px;font-weight:700;line-height:1}
 .sig-score-lbl{font-size:8px;color:var(--muted);margin-top:1px}
-/* Active filter breadcrumb */
-.filter-crumb{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:7px 12px;background:var(--s2);border:1px solid var(--br2);border-radius:7px;font-size:10px;font-family:var(--mono)}
-.filter-crumb-clear{cursor:pointer;color:var(--red);font-size:10px;margin-left:auto;padding:1px 6px;border-radius:4px;border:1px solid rgba(255,61,90,.2);background:rgba(255,61,90,.06)}
-.filter-crumb-clear:hover{background:rgba(255,61,90,.14)}
-/* PCR gauge */
 .pcr-gauge{background:var(--s2);border-radius:8px;padding:10px 12px;margin-bottom:10px}
 .pcr-gauge-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .pcr-val{font-family:var(--mono);font-size:22px;font-weight:700}
-.pcr-zone{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px}
+.pcr-zone-lbl{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px}
 .pcr-bar-track{height:6px;background:var(--br2);border-radius:3px;position:relative;overflow:hidden}
 .pcr-bar-fill{height:100%;border-radius:3px;transition:width .3s}
 .pcr-labels{display:flex;justify-content:space-between;font-size:8px;color:var(--dim);font-family:var(--mono);margin-top:3px}
@@ -137,7 +130,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .pcr-stat{background:var(--s3);border-radius:5px;padding:5px 7px}
 .pcr-stat-k{font-size:7px;color:var(--muted);margin-bottom:2px}
 .pcr-stat-v{font-family:var(--mono);font-size:10px;font-weight:700}
-/* Paper trading */
 .paper-bal-label{font-size:9px;color:var(--yel);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
 .paper-trade-form{background:var(--s1);border:1px solid var(--br);border-radius:10px;padding:16px;margin-bottom:16px}
 .paper-form-title{font-size:11px;font-weight:600;color:var(--acc);margin-bottom:12px;font-family:var(--mono);letter-spacing:.5px}
@@ -154,7 +146,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .paper-trade-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:center;background:var(--s2);border-radius:7px;padding:10px 12px;margin-bottom:6px;font-size:11px}
 .paper-status-open{color:var(--yel);font-family:var(--mono);font-size:9px;font-weight:700}
 .paper-status-closed{color:var(--muted);font-family:var(--mono);font-size:9px}
-/* Subscription */
 .plans-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
 .plan-card{background:var(--s1);border:1px solid var(--br);border-radius:12px;padding:20px;position:relative;transition:border-color .15s}
 .plan-card.current{border-color:rgba(0,212,255,.35);background:rgba(0,212,255,.04)}
@@ -165,8 +156,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .plan-features{list-style:none;margin:12px 0 16px;display:flex;flex-direction:column;gap:6px}
 .plan-features li{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .plan-features li::before{content:'✓';color:var(--grn);font-size:10px;font-weight:700;flex-shrink:0}
-.plan-features li.locked::before{content:'⊘';color:var(--dim)}
-.plan-features li.locked{color:var(--dim)}
 .eq-price-hero{background:var(--s2);border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
 .eq-sym{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--acc)}
 .eq-ltp{font-family:var(--mono);font-size:18px;font-weight:700}
@@ -194,7 +183,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .idx-card{background:var(--s1);border:1px solid var(--br);border-radius:9px;padding:12px 14px;transition:border-color .12s}
 .idx-card:hover{border-color:var(--br2)}
 .idx-name{font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;text-transform:uppercase}
-.idx-ltp{font-family:var(--mono);font-size:16px;font-weight:700;transition:color .2s}
+.idx-ltp{font-family:var(--mono);font-size:16px;font-weight:700}
 .idx-chg{font-size:10px;margin-top:2px}
 .idx-hl{font-size:8px;color:var(--dim);margin-top:3px;font-family:var(--mono)}
 .movers-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
@@ -207,10 +196,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:1
 .mover-chg{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px}
 .chg-up{background:rgba(0,255,157,.1);color:var(--grn)}
 .chg-dn{background:rgba(255,61,90,.1);color:var(--red)}
-@keyframes flash-up{0%{background:rgba(0,255,157,.25)}100%{background:transparent}}
-@keyframes flash-dn{0%{background:rgba(255,61,90,.25)}100%{background:transparent}}
-.flash-up{animation:flash-up .4s ease-out}
-.flash-dn{animation:flash-dn .4s ease-out}
+@keyframes flash-up{0%,30%{background:rgba(0,255,157,.28)}100%{background:transparent}}
+@keyframes flash-dn{0%,30%{background:rgba(255,61,90,.28)}100%{background:transparent}}
+.flash-up{animation:flash-up .6s ease-out}
+.flash-dn{animation:flash-dn .6s ease-out}
 .live-dot{width:6px;height:6px;border-radius:50%;background:var(--grn);display:inline-block;animation:pulse 1s infinite;margin-right:5px}
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)}
 .login-card{background:var(--s1);border:1px solid var(--br);border-radius:14px;padding:38px;width:370px}
@@ -241,7 +230,6 @@ function api(path, opts={}) {
     ...opts
   }).then(r=>r.json());
 }
-
 function skey(name){ const m=(name||"").match(/^([SE]\d)/i); return m?m[1].toUpperCase():"S1"; }
 function scoreColor(s){ return s>=75?"var(--grn)":s>=60?"var(--yel)":"var(--orn)"; }
 function sigClass(dir=""){
@@ -254,24 +242,17 @@ function fmt(n,dec=2){ return n!=null&&n!==0?Number(n).toLocaleString("en-IN",{m
 function fmtINR(n){ return n!=null?`₹${Number(n).toLocaleString("en-IN")}`:"—"; }
 function chgClass(c){ return c>0?"tick-up":c<0?"tick-dn":"tick-unch"; }
 
-// ── FIXED market routing ──────────────────────────────────────────
-// FO signals: market="FO", instrument=NIFTY|BANKNIFTY|FINNIFTY
-// PCR signals: market="FO", strategy contains "PCR", instrument=NIFTY|BANKNIFTY|FINNIFTY
-// Equity signals: market="EQUITY"
+// ── Market routing: FO signals have market="FO", matched by instrument field ──
 function matchesMarket(sig, market) {
   if (market === "ALL") return true;
   if (market === "EQUITY") return sig.market === "EQUITY";
   const inst = (sig.instrument || sig.symbol || "").toUpperCase();
   return inst === market && sig.market !== "EQUITY";
 }
-
-// ── FIXED strategy sub-filter ─────────────────────────────────────
-// Compares skey of signal (e.g. "S5") against skey of selected strategy label (e.g. "S5 PCR Contrarian" -> "S5")
+// Strategy sub-filter: match by strategy key (S1, S2 … E1 …)
 function matchesStrategy(sig, stratLabel) {
   if (!stratLabel) return true;
-  const sigKey = skey(sig.strategy);      // "S5"
-  const filterKey = skey(stratLabel);      // "S5" from "S5 PCR Contrarian"
-  return sigKey === filterKey;
+  return skey(sig.strategy) === skey(stratLabel);
 }
 
 function Login({onLogin}){
@@ -304,13 +285,14 @@ function Login({onLogin}){
   </>);
 }
 
+// ── FIX: Index ticker keyed by label so flash fires correctly ──────────────────
 function IndexTicker({indices}){
   if(!indices||!indices.length) return null;
   const items=[...indices,...indices];
   return(
     <div className="ticker-bar"><div className="ticker-inner">
       {items.map((idx,i)=>(
-        <div className={`tick-item ${idx._flash||""}`} key={`${i}-${idx._ts||0}`}>
+        <div className={`tick-item ${idx._flash||""}`} key={`${idx.label}-${i}-${idx._ts||0}`}>
           <span className="tick-label">{idx.label}</span>
           <span className={`tick-val ${chgClass(idx.change_pct)}`}>
             {idx.ltp?fmt(idx.ltp,idx.label==="VIX"?2:0):"—"}
@@ -333,11 +315,11 @@ function IndexStrip({indices}){
   if(!shown.length) return null;
   return(
     <div className="idx-strip">
-      {shown.map((idx,i)=>{
+      {shown.map((idx)=>{
         const up=idx.change_pct>0,dn=idx.change_pct<0;
         const col=up?"var(--grn)":dn?"var(--red)":"var(--muted)";
         return(
-          <div className={`idx-card ${idx._flash||""}`} key={`${i}-${idx._ts||0}`}>
+          <div className={`idx-card ${idx._flash||""}`} key={`${idx.label}-${idx._ts||0}`}>
             <div className="idx-name">{idx.label}</div>
             <div className="idx-ltp" style={{color:idx.ltp?col:"var(--muted)"}}>
               {idx.ltp?fmt(idx.ltp,idx.label==="VIX"?2:0):"Loading…"}
@@ -353,14 +335,12 @@ function IndexStrip({indices}){
   );
 }
 
-// ── PCR Card ──────────────────────────────────────────────────────
 function PcrCard({sig}){
-  const pcr = sig.pcr_oi;
-  const zone = sig.zone || (pcr < 0.6 ? "OVERBOUGHT" : pcr > 1.3 ? "OVERSOLD" : "NEUTRAL");
-  const zoneCol = PCR_ZONE_COLOR[zone] || "var(--muted)";
-  const pcrClamped = Math.min(2, Math.max(0, pcr || 1));
-  const barWidth = Math.round(pcrClamped / 2 * 100);
-  const barColor = zone==="OVERSOLD"?"var(--grn)":zone==="OVERBOUGHT"?"var(--red)":"var(--yel)";
+  const pcr=sig.pcr_oi;
+  const zone=sig.zone||(pcr<0.6?"OVERBOUGHT":pcr>1.3?"OVERSOLD":"NEUTRAL");
+  const zoneCol=PCR_ZONE_COLOR[zone]||"var(--muted)";
+  const barWidth=Math.round(Math.min(2,Math.max(0,pcr||1))/2*100);
+  const barColor=zone==="OVERSOLD"?"var(--grn)":zone==="OVERBOUGHT"?"var(--red)":"var(--yel)";
   return(
     <div className={`sig-card ${sigClass(sig.direction)}`}>
       <div className="sig-top">
@@ -383,13 +363,13 @@ function PcrCard({sig}){
             <div style={{fontSize:9,color:"var(--muted)",marginBottom:3}}>PUT/CALL RATIO (OI)</div>
             <div className="pcr-val" style={{color:zoneCol}}>{pcr!=null?Number(pcr).toFixed(3):"—"}</div>
           </div>
-          <div className="pcr-zone" style={{background:zoneCol+"20",color:zoneCol,border:`1px solid ${zoneCol}40`}}>
+          <div className="pcr-zone-lbl" style={{background:zoneCol+"20",color:zoneCol,border:`1px solid ${zoneCol}40`}}>
             {sig.signal||zone}
           </div>
         </div>
         <div className="pcr-bar-track"><div className="pcr-bar-fill" style={{width:barWidth+"%",background:barColor}}/></div>
         <div className="pcr-labels">
-          <span>0 GREED</span><span>0.60</span><span>0.85</span><span>1.15</span><span>1.30</span><span>2.0 FEAR</span>
+          <span>0 GREED</span><span>0.60</span><span>1.15</span><span>1.30</span><span>2.0 FEAR</span>
         </div>
         <div className="pcr-detail">
           <div className="pcr-stat"><div className="pcr-stat-k">PUT OI</div>
@@ -404,7 +384,7 @@ function PcrCard({sig}){
       <div className="sig-action">
         <span style={{color:sig.direction==="LONG"||sig.direction==="BUY"?"var(--grn)":"var(--red)",fontWeight:700}}>{sig.direction}</span>
         {" "}{sig.instrument} — PCR {pcr!=null?Number(pcr).toFixed(3):"—"}
-        {zone==="OVERBOUGHT"?" — Heavy CALL buying, fade the greed":zone==="OVERSOLD"?" — Heavy PUT buying, fade the fear":""}
+        {zone==="OVERBOUGHT"?" — Fade the GREED":zone==="OVERSOLD"?" — Fade the FEAR":""}
       </div>
       {sig.reason&&<div className="sig-reason">{sig.reason}</div>}
       <div className="sig-foot">
@@ -483,9 +463,7 @@ function FoCard({sig}){
               <span className="sig-tag" style={{
                 background:sig.event_type==="entry"?"rgba(0,255,157,.12)":sig.event_type==="exit"?"rgba(255,61,90,.12)":"rgba(245,197,24,.08)",
                 color:sig.event_type==="entry"?"var(--grn)":sig.event_type==="exit"?"var(--red)":"var(--yel)",
-                border:"1px solid transparent"}}>
-                {sig.event_type?.toUpperCase()}
-              </span>
+                border:"1px solid transparent"}}>{sig.event_type?.toUpperCase()}</span>
             )}
           </div>
         </div>
@@ -529,8 +507,7 @@ function FoCard({sig}){
 
 function SigCard({sig}){
   if(sig.market==="EQUITY") return <EqCard sig={sig}/>;
-  // Route PCR by strategy name — covers both mock ("S5 PCR CONTRARIAN") and live pcr_strategy source
-  if((sig.strategy||"").toUpperCase().includes("PCR")||sig.source==="pcr_strategy") return <PcrCard sig={sig}/>;
+  if((sig.strategy||"").toUpperCase().includes("PCR")||sig.source==="pcr_strategy"||sig.source==="pcr_mock") return <PcrCard sig={sig}/>;
   return <FoCard sig={sig}/>;
 }
 
@@ -542,22 +519,18 @@ function MoversPanel(){
       <div className="mover-table">
         <div className="mover-hdr" style={{color:"var(--grn)"}}>▲ Top Gainers</div>
         {movers.gainers.map((m,i)=>(
-          <div className="mover-row" key={i}>
-            <span className="mover-sym">{m.symbol}</span>
+          <div className="mover-row" key={i}><span className="mover-sym">{m.symbol}</span>
             <span className="mover-ltp">₹{fmt(m.ltp,2)}</span>
-            <span className="mover-chg chg-up">+{fmt(m.change_pct,2)}%</span>
-          </div>
+            <span className="mover-chg chg-up">+{fmt(m.change_pct,2)}%</span></div>
         ))}
         {!movers.gainers.length&&<div style={{padding:"12px 14px",fontSize:11,color:"var(--muted)"}}>Loading…</div>}
       </div>
       <div className="mover-table">
         <div className="mover-hdr" style={{color:"var(--red)"}}>▼ Top Losers</div>
         {movers.losers.map((m,i)=>(
-          <div className="mover-row" key={i}>
-            <span className="mover-sym">{m.symbol}</span>
+          <div className="mover-row" key={i}><span className="mover-sym">{m.symbol}</span>
             <span className="mover-ltp">₹{fmt(m.ltp,2)}</span>
-            <span className="mover-chg chg-dn">{fmt(m.change_pct,2)}%</span>
-          </div>
+            <span className="mover-chg chg-dn">{fmt(m.change_pct,2)}%</span></div>
         ))}
         {!movers.losers.length&&<div style={{padding:"12px 14px",fontSize:11,color:"var(--muted)"}}>Loading…</div>}
       </div>
@@ -565,7 +538,7 @@ function MoversPanel(){
   );
 }
 
-function StratSegBanner({signals}){
+function StratSegBanner({signals, onClickStrat}){
   const groups=[
     {id:"S1",label:"Calendar",  color:"#00d4ff"},
     {id:"S2",label:"Iron Condor",color:"#00ff9d"},
@@ -581,7 +554,7 @@ function StratSegBanner({signals}){
           ?signals.filter(s=>s.market==="EQUITY").length
           :signals.filter(s=>skey(s.strategy)===g.id).length;
         return(
-          <div key={g.id} className="strat-seg-card">
+          <div key={g.id} className="strat-seg-card" onClick={()=>onClickStrat&&onClickStrat(g.id)}>
             <div>
               <div className="strat-seg-name">{g.label}</div>
               <div className="strat-seg-count" style={{color:count>0?g.color:"var(--dim)"}}>{count}</div>
@@ -594,43 +567,25 @@ function StratSegBanner({signals}){
   );
 }
 
-// ── FIXED SignalsTab: uses matchesStrategy helper, shows active filter crumb ──
-function SignalsTab({signals,market,strategy,indices,onClearStrategy}){
+function SignalsTab({signals, market, strategy, indices, onClearStrategy}){
   const filtered = signals
     .filter(s => matchesMarket(s, market))
     .filter(s => matchesStrategy(s, strategy));
-
   const mktObj = MARKETS.find(m=>m.id===market);
-
   return(
     <div>
       <IndexStrip indices={indices}/>
       {market==="ALL"&&<MoversPanel/>}
       {market==="ALL"&&<StratSegBanner signals={signals}/>}
-
-      {/* Active filter breadcrumb */}
       {(market!=="ALL"||strategy)&&(
         <div className="filter-crumb">
-          {market!=="ALL"&&(
-            <span style={{color:mktObj?.color||"var(--acc)"}}>
-              {mktObj?.label||market}
-            </span>
-          )}
+          {market!=="ALL"&&<span style={{color:mktObj?.color||"var(--acc)"}}>{mktObj?.label||market}</span>}
           {market!=="ALL"&&strategy&&<span style={{color:"var(--dim)"}}>›</span>}
-          {strategy&&(
-            <span style={{color:STRAT_INFO[skey(strategy)]?.color||"var(--acc)"}}>
-              {strategy}
-            </span>
-          )}
-          <span style={{color:"var(--muted)",fontSize:9}}>
-            &nbsp;— {filtered.length} signal{filtered.length!==1?"s":""}
-          </span>
-          {strategy&&(
-            <span className="filter-crumb-clear" onClick={onClearStrategy}>× Clear</span>
-          )}
+          {strategy&&<span style={{color:STRAT_INFO[skey(strategy)]?.color||"var(--acc)"}}>{strategy}</span>}
+          <span style={{color:"var(--muted)",fontSize:9}}>&nbsp;— {filtered.length} signal{filtered.length!==1?"s":""}</span>
+          {strategy&&<span className="filter-crumb-clear" onClick={onClearStrategy}>× Clear</span>}
         </div>
       )}
-
       {filtered.length>0?(
         <div className="sigs-grid">
           {filtered.map((s,i)=><SigCard key={s.id||`${s.timestamp}-${i}`} sig={s}/>)}
@@ -642,7 +597,7 @@ function SignalsTab({signals,market,strategy,indices,onClearStrategy}){
           <div className="empty-s">
             {market!=="ALL"
               ?`${market}${strategy?" • "+strategy:""} signals appear during market hours 9:15–15:30`
-              :"Waiting for NSE data — signals refresh every 5s"}
+              :"Waiting for signals — backend pushes every 5s"}
           </div>
         </div>
       )}
@@ -654,9 +609,7 @@ function AnalyticsTab(){
   const [pnl,setPnl]=useState(null);
   useEffect(()=>{api("/analytics/pnl").then(setPnl).catch(()=>{});},[]);
   const byS=pnl?.by_strategy||{};
-  const chart=Object.entries(byS).map(([k,v])=>({
-    name:k.replace(/^[SE]\d\s/,"").slice(0,12),pnl:Math.round(v.total_pnl||0),
-  }));
+  const chart=Object.entries(byS).map(([k,v])=>({name:k.replace(/^[SE]\d\s/,"").slice(0,12),pnl:Math.round(v.total_pnl||0)}));
   return(
     <div>
       <div className="stats-grid">
@@ -706,15 +659,12 @@ function TradesTab(){
           {l:"Open Trades",v:tr.open_count||open.length,c:"var(--yel)"},
           {l:"Closed",v:tr.closed_count||0,c:"var(--acc)"},
         ].map((s,i)=>(
-          <div key={i} className="stat-card">
-            <div className="stat-lbl">{s.l}</div>
-            <div className="stat-val" style={{color:s.c,fontSize:18}}>{s.v}</div>
-          </div>
+          <div key={i} className="stat-card"><div className="stat-lbl">{s.l}</div>
+            <div className="stat-val" style={{color:s.c,fontSize:18}}>{s.v}</div></div>
         ))}
       </div>
       {open.length>0&&(
-        <div className="card" style={{marginBottom:16}}>
-          <div className="card-lbl">Open Positions</div>
+        <div className="card" style={{marginBottom:16}}><div className="card-lbl">Open Positions</div>
           {open.map(t=>(
             <div className="paper-trade-row" key={t.id}>
               <span style={{fontFamily:"var(--mono)",fontSize:11}}>{t.id}</span>
@@ -726,8 +676,7 @@ function TradesTab(){
         </div>
       )}
       {closed.length>0&&(
-        <div className="card">
-          <div className="card-lbl">Recent Closed</div>
+        <div className="card"><div className="card-lbl">Recent Closed</div>
           {closed.map(t=>(
             <div className="paper-trade-row" key={t.id}>
               <span style={{fontFamily:"var(--mono)",fontSize:11}}>{t.id}</span>
@@ -741,7 +690,7 @@ function TradesTab(){
       {!open.length&&!closed.length&&(
         <div className="empty"><div className="empty-ico">📋</div>
           <div className="empty-t">No trades logged yet</div>
-          <div className="empty-s">Signals appear automatically — use Paper Trade to practice</div>
+          <div className="empty-s">Use Paper Trade to practice — or log live trades via Signals</div>
         </div>
       )}
     </div>
@@ -826,8 +775,7 @@ function PaperTab(){
         <button className="btn btn-primary" onClick={enter} disabled={loading}>{loading?"Entering…":"Enter Paper Trade"}</button>
       </div>
       {open.length>0&&(
-        <div className="card" style={{marginBottom:14}}>
-          <div className="card-lbl">Open Paper Positions</div>
+        <div className="card" style={{marginBottom:14}}><div className="card-lbl">Open Paper Positions</div>
           {open.map(t=>(
             <div key={t.id} style={{marginBottom:8}}>
               <div className="paper-trade-row">
@@ -851,8 +799,7 @@ function PaperTab(){
         </div>
       )}
       {closed.length>0&&(
-        <div className="card">
-          <div className="card-lbl">Closed Paper Trades</div>
+        <div className="card"><div className="card-lbl">Closed Paper Trades</div>
           {closed.slice(-8).reverse().map(t=>(
             <div className="paper-trade-row" key={t.id}>
               <span style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--dim)"}}>{t.id}</span>
@@ -913,16 +860,12 @@ function SubscriptionTab({user}){
               <div className="plan-badge" style={{background:bc+"20",color:bc,border:`1px solid ${bc}30`}}>{isCurrent?"ACTIVE":p.badge}</div>
               <div className="plan-name" style={{color:bc}}>{p.name}</div>
               <div className="plan-price">{p.price===0?"FREE":`₹${p.price.toLocaleString("en-IN")}`}{p.price>0&&<span>/mo</span>}</div>
-              <ul className="plan-features">
-                {p.features.map((f,i)=>(<li key={i}>{f}</li>))}
-              </ul>
+              <ul className="plan-features">{p.features.map((f,i)=>(<li key={i}>{f}</li>))}</ul>
               {!isCurrent&&(
                 <button className="btn btn-primary" style={{width:"100%",fontSize:11}}
                   onClick={()=>upgrade(p.id)} disabled={loading===p.id}>{loading===p.id?"Upgrading…":"Upgrade"}</button>
               )}
-              {isCurrent&&(
-                <div style={{textAlign:"center",fontSize:10,color:bc,fontFamily:"var(--mono)",padding:"9px 0",fontWeight:700}}>CURRENT PLAN</div>
-              )}
+              {isCurrent&&<div style={{textAlign:"center",fontSize:10,color:bc,fontFamily:"var(--mono)",padding:"9px 0",fontWeight:700}}>CURRENT PLAN</div>}
             </div>
           );
         })}
@@ -931,20 +874,23 @@ function SubscriptionTab({user}){
   );
 }
 
-// ── MAIN APP ──────────────────────────────────────────────────────
 export default function App(){
   const [user,setUser]      =useState(()=>localStorage.getItem("tok")?{tok:true}:null);
   const [signals,setSigs]   =useState([]);
   const [regime,setRegime]  =useState(null);
-  const [indices,setIdxs]   =useState([]);
+  // ── FIX: indices stored as label-keyed map to avoid array-index mismatch ──
+  const [indicesMap,setIdxMap]=useState({});  // { NIFTY: {...}, BANKNIFTY: {...}, ... }
   const [mkt,setMkt]        =useState("ALL");
   const [strat,setStrat]    =useState(null);
-  // openMkt tracks which market's strategy dropdown is EXPANDED (independent of selected market)
   const [openMkt,setOpenMkt]=useState(null);
   const [tab,setTab]        =useState("signals");
   const [wsStatus,setWsSt]  =useState("connecting");
   const [clock,setClock]    =useState(new Date());
   const wsRef=useRef(null);
+  const IDX_ORDER=["NIFTY","BANKNIFTY","FINNIFTY","VIX","MIDCAP","IT"];
+
+  // Derive ordered indices array from map for display
+  const indices = IDX_ORDER.map(l=>indicesMap[l]).filter(Boolean);
 
   useEffect(()=>{const t=setInterval(()=>setClock(new Date()),100);return()=>clearInterval(t);},[]);
 
@@ -967,12 +913,22 @@ export default function App(){
             setSigs(prev=>[...d.signals,...prev.filter(s=>s.market!=="EQUITY")].slice(0,300));
             return;
           }
+          // ── FIX: update by label key, compute flash per-label ──
           if(d.type==="indices_update"&&d.indices?.length){
-            setIdxs(prev=>d.indices.map((idx,i)=>({
-              ...idx,
-              _flash:(prev[i]?.ltp||0)<idx.ltp?"flash-up":(prev[i]?.ltp||0)>idx.ltp?"flash-dn":"",
-              _ts:Date.now(),
-            })));
+            setIdxMap(prev=>{
+              const next={...prev};
+              for(const idx of d.indices){
+                const prevLtp=(prev[idx.label]?.ltp)||0;
+                next[idx.label]={
+                  ...idx,
+                  _flash: prevLtp && idx.ltp!==prevLtp
+                    ? (idx.ltp>prevLtp?"flash-up":"flash-dn")
+                    : "",
+                  _ts: Date.now(),
+                };
+              }
+              return next;
+            });
             return;
           }
           if(d.type==="regime"){ setRegime(r=>({...r,...d})); return; }
@@ -987,8 +943,13 @@ export default function App(){
 
   useEffect(()=>{
     if(!user) return;
-    api("/signals").then(d=>{ if(d.signals?.length) setSigs(d.signals); }).catch(()=>{});
-    api("/indices").then(d=>{ if(d.indices?.length) setIdxs(d.indices); }).catch(()=>{});
+    api("/signals?limit=50").then(d=>{ if(d.signals?.length) setSigs(d.signals); }).catch(()=>{});
+    api("/indices").then(d=>{
+      if(d.indices?.length){
+        const m={}; for(const idx of d.indices) m[idx.label]={...idx,_flash:"",_ts:Date.now()};
+        setIdxMap(m);
+      }
+    }).catch(()=>{});
     api("/signals/equity?top=15").then(d=>{
       if(d.signals?.length) setSigs(prev=>[...d.signals,...prev.filter(s=>s.market!=="EQUITY")].slice(0,300));
     }).catch(()=>{});
@@ -998,11 +959,22 @@ export default function App(){
     if(!user) return;
     const iv=setInterval(()=>{
       api("/indices").then(d=>{
-        if(d.indices?.length) setIdxs(prev=>d.indices.map((idx,i)=>({
-          ...idx,_flash:(prev[i]?.ltp||0)<idx.ltp?"flash-up":(prev[i]?.ltp||0)>idx.ltp?"flash-dn":"",_ts:Date.now(),
-        })));
+        if(d.indices?.length){
+          setIdxMap(prev=>{
+            const next={...prev};
+            for(const idx of d.indices){
+              const prevLtp=(prev[idx.label]?.ltp)||0;
+              next[idx.label]={
+                ...idx,
+                _flash: prevLtp && idx.ltp!==prevLtp ? (idx.ltp>prevLtp?"flash-up":"flash-dn") : "",
+                _ts: Date.now(),
+              };
+            }
+            return next;
+          });
+        }
       }).catch(()=>{});
-    },15000);
+    },10000);  // poll every 10s for more visible fluctuation
     return()=>clearInterval(iv);
   },[user]);
 
@@ -1024,26 +996,12 @@ export default function App(){
   const bull=signals.filter(s=>["BUY","BULL","LONG"].some(k=>s.direction?.toUpperCase().includes(k))).length;
   const bear=signals.filter(s=>["SELL","BEAR","SHORT","EXIT"].some(k=>s.direction?.toUpperCase().includes(k))).length;
   const neut=signals.length-bull-bear;
-  const pcrCount=signals.filter(s=>(s.strategy||"").toUpperCase().includes("PCR")||s.source==="pcr_strategy").length;
+  const pcrCount=signals.filter(s=>(s.strategy||"").toUpperCase().includes("PCR")||s.source==="pcr_strategy"||s.source==="pcr_mock").length;
   const foCount=signals.filter(s=>s.market==="FO"||(s.market&&s.market!=="EQUITY")).length;
 
-  // FIX: SEPARATE market filter from dropdown toggle
-  // Click on market label -> set filter (mkt), also open that market's dropdown if not already open
-  // Click on chevron -> toggle dropdown only, don't change filter
-  const selectMarket = m => {
-    setMkt(m);
-    setStrat(null);
-    setTab("signals"); // always show signals when market is selected
-    if (m !== "ALL") setOpenMkt(m); // auto-open dropdown for selected market
-    else setOpenMkt(null);
-  };
-  const toggleDropdown = m => {
-    setOpenMkt(prev => prev === m ? null : m);
-  };
-  const selectStrategy = s => {
-    setStrat(prev => prev === s ? null : s);
-    setTab("signals");
-  };
+  const selectMarket=m=>{ setMkt(m); setStrat(null); setTab("signals"); setOpenMkt(m!=="ALL"?m:null); };
+  const toggleDropdown=m=>{ setOpenMkt(prev=>prev===m?null:m); };
+  const selectStrategy=s=>{ setStrat(prev=>prev===s?null:s); setTab("signals"); };
 
   const TABS=[
     {id:"signals",lbl:`Signals (${signals.length})`},
@@ -1076,54 +1034,48 @@ export default function App(){
           ))}
 
           <div className="nav-sect">Markets</div>
-          {MARKETS.map(m=>(
-            <div key={m.id}>
-              <div className={`mkt-btn ${mkt===m.id?"act":""}`}>
-                {/* Label area: click to SET FILTER */}
-                <div className="mkt-label-area" onClick={()=>selectMarket(m.id)}>
-                  <div className="mkt-badge" style={{background:m.color+"20",color:m.color}}>{m.icon}</div>
-                  <span className="mkt-name" style={{color:mkt===m.id?m.color:undefined}}>
-                    {m.label}
-                    {/* signal count badge next to market name */}
-                    {m.id!=="ALL"&&(
-                      ()=>{
-                        const cnt=signals.filter(s=>matchesMarket(s,m.id)).length;
-                        return cnt>0?(
-                          <span style={{marginLeft:4,fontSize:8,background:m.color+"20",color:m.color,padding:"1px 5px",borderRadius:3}}>{cnt}</span>
-                        ):null;
-                      }
-                    )()}
-                  </span>
+          {MARKETS.map(m=>{
+            const mktSigCount=m.id!=="ALL"?signals.filter(s=>matchesMarket(s,m.id)).length:0;
+            return(
+              <div key={m.id}>
+                <div className={`mkt-btn ${mkt===m.id?"act":""}`}>
+                  <div className="mkt-label-area" onClick={()=>selectMarket(m.id)}>
+                    <div className="mkt-badge" style={{background:m.color+"20",color:m.color}}>{m.icon}</div>
+                    <span className="mkt-name" style={{color:mkt===m.id?m.color:undefined}}>
+                      {m.label}
+                      {m.id!=="ALL"&&mktSigCount>0&&(
+                        <span style={{marginLeft:4,fontSize:8,background:m.color+"20",color:m.color,padding:"1px 5px",borderRadius:3}}>{mktSigCount}</span>
+                      )}
+                    </span>
+                  </div>
+                  {m.id!=="ALL"&&(
+                    <div className="mkt-chev-btn" onClick={e=>{e.stopPropagation();toggleDropdown(m.id);}}>
+                      <span className={`chev ${openMkt===m.id?"open":""}`}>▾</span>
+                    </div>
+                  )}
                 </div>
-                {/* Chevron: click to TOGGLE DROPDOWN only */}
-                {m.id!=="ALL"&&(
-                  <div className="mkt-chev-btn" onClick={e=>{e.stopPropagation();toggleDropdown(m.id);}}>
-                    <span className={`chev ${openMkt===m.id?"open":""}`}>▾</span>
+
+                {/* Strategy sub-list */}
+                {openMkt===m.id&&m.strategies&&(
+                  <div className="strat-list">
+                    {m.strategies.map(s=>{
+                      const k=skey(s); const info=STRAT_INFO[k]||{color:m.color};
+                      const isActive=strat===s;
+                      const cnt=signals.filter(sg=>matchesMarket(sg,m.id)&&matchesStrategy(sg,s)).length;
+                      return(
+                        <div key={s} className={`strat-it ${isActive?"act":""}`} onClick={()=>selectStrategy(s)}>
+                          <div className="s-dot" style={{background:isActive?info.color:"var(--br)"}}/>
+                          <span style={{flex:1}}>{s}</span>
+                          {cnt>0&&<span style={{fontSize:8,fontFamily:"var(--mono)",color:info.color,background:info.color+"18",padding:"1px 5px",borderRadius:3}}>{cnt}</span>}
+                          <span style={{fontSize:7,color:info.color,fontFamily:"var(--mono)",marginLeft:2}}>{info.tag}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-
-              {/* Strategy sub-list — visible when this market's dropdown is open */}
-              {openMkt===m.id&&m.strategies&&(
-                <div className="strat-list">
-                  {m.strategies.map(s=>{
-                    const k=skey(s); const info=STRAT_INFO[k]||{color:m.color};
-                    const isActive=strat===s;
-                    // count signals matching this market + strategy
-                    const cnt=signals.filter(sg=>matchesMarket(sg,m.id)&&matchesStrategy(sg,s)).length;
-                    return(
-                      <div key={s} className={`strat-it ${isActive?"act":""}`} onClick={()=>selectStrategy(s)}>
-                        <div className="s-dot" style={{background:isActive?info.color:"var(--br)"}}/>
-                        <span style={{flex:1}}>{s}</span>
-                        {cnt>0&&<span style={{fontSize:8,fontFamily:"var(--mono)",color:info.color,background:info.color+"18",padding:"1px 5px",borderRadius:3}}>{cnt}</span>}
-                        <span style={{fontSize:7,color:info.color,fontFamily:"var(--mono)",marginLeft:2}}>{info.tag}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           <div className="nav-sect">Data Sources</div>
           <div className="feed-row feed-ok">◉ NSE Direct API</div>
@@ -1150,7 +1102,7 @@ export default function App(){
           </div>
           <div className="topbar-right">
             {regime?.vix!=null&&<div className="badge" style={{color:rCol}}>VIX {regime.vix}</div>}
-            {pcrCount>0&&<div className="badge" style={{color:"#22c55e",borderColor:"rgba(34,197,94,.2)"}}>PCR {pcrCount}</div>}
+            {pcrCount>0&&<div className="badge" style={{color:"#22c55e",borderColor:"rgba(34,197,94,.2)"}}>PCR ●{pcrCount}</div>}
             <div className="badge" style={{display:"flex",alignItems:"center",gap:5,
               color:wsStatus==="live"?"var(--grn)":wsStatus==="connecting"?"var(--yel)":"var(--red)"}}>
               {wsStatus==="live"?<><span style={{width:6,height:6,borderRadius:"50%",background:"var(--grn)",display:"inline-block",animation:"pulse 1s infinite"}}/>LIVE</>
@@ -1181,9 +1133,9 @@ export default function App(){
             <>
               <div className="stats-grid" style={{marginBottom:16}}>
                 {[
-                  {l:"Total Signals",  v:signals.length,   c:"var(--acc)"},
-                  {l:"F&O Signals",    v:foCount,          c:"var(--grn)"},
-                  {l:"PCR Signals",    v:pcrCount,         c:"#22c55e"},
+                  {l:"Total Signals",  v:signals.length, c:"var(--acc)"},
+                  {l:"F&O Signals",    v:foCount,        c:"var(--grn)"},
+                  {l:"PCR Signals",    v:pcrCount,       c:"#22c55e"},
                   {l:"Equity Signals", v:signals.filter(s=>s.market==="EQUITY").length, c:"var(--pur)"},
                 ].map((s,i)=>(
                   <div key={i} className="stat-card">
@@ -1193,10 +1145,8 @@ export default function App(){
                   </div>
                 ))}
               </div>
-              <SignalsTab
-                signals={signals} market={mkt} strategy={strat} indices={indices}
-                onClearStrategy={()=>setStrat(null)}
-              />
+              <SignalsTab signals={signals} market={mkt} strategy={strat} indices={indices}
+                onClearStrategy={()=>setStrat(null)}/>
             </>
           )}
           {tab==="analytics"   &&<AnalyticsTab/>}
