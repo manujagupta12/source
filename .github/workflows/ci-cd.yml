@@ -7,30 +7,31 @@ on:
   pull_request:
     branches: [main]
 
+# Opt into Node.js 24 runner to avoid deprecation failures
 env:
   REGISTRY: ghcr.io
   IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/algotrade-backend
   IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/algotrade-frontend
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
 
   lint-test:
     name: Lint & Test
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Python ───────────────────────────────────────────────────
+      # ── Python ─────────────────────────────────────────────────
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # FIX 1: explicit cache action (setup-python cache: pip requires
-      #         requirements.txt at repo root which we don't have)
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -38,27 +39,25 @@ jobs:
           key: pip-${{ runner.os }}-${{ hashFiles('app/backend/requirements.txt') }}
           restore-keys: pip-${{ runner.os }}-
 
-      - name: Install Python deps
+      - name: Install Python deps + flake8
         run: pip install -r app/backend/requirements.txt flake8
 
-      # FIX 2: syntax-only lint (avoid E9/F errors that kill the job;
-      #         broad style ignores so cosmetic issues don't block CI)
-      - name: Lint backend (syntax + undefined names only)
+      # Lint only fatal errors (syntax/undefined) — style issues don't block CI
+      - name: Lint backend
         run: |
           flake8 app/backend/main.py algo/pcr_strategy.py \
             --select=E9,F821,F823 \
             --max-line-length=200 \
             --count
 
-      # FIX 3: py_compile instead of import (import triggers asyncio
-      #         lifespan outside event loop and crashes the step)
+      # Syntax-check only — don't import (avoids asyncio/uvicorn crash)
       - name: Validate Python syntax
         run: |
           python -m py_compile app/backend/main.py
           python -m py_compile algo/pcr_strategy.py
           echo "Python syntax OK"
 
-      # ── Node / Vite ───────────────────────────────────────────────
+      # ── Node / Vite ──────────────────────────────────────────────
       - name: Set up Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
@@ -71,13 +70,12 @@ jobs:
           key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
           restore-keys: npm-${{ runner.os }}-
 
-      # FIX 4: npm install --legacy-peer-deps instead of npm ci
-      #         React 19 has unresolved peer-dep conflicts that cause
-      #         npm ci to exit non-zero on a clean install
+      # --legacy-peer-deps: React 19 has unresolved peer-dep conflicts
       - name: Install frontend deps
         working-directory: app/frontend
         run: npm install --legacy-peer-deps
 
+      # vite.config.js now uses simple build (no manualChunks)
       - name: Build frontend (Vite)
         working-directory: app/frontend
         run: npm run build
@@ -105,7 +103,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # FIX 5: QEMU needed for multi-arch (arm64) builds
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -143,7 +140,6 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
-      # FIX 6: build-push-action@v5 (v6 does not exist)
       - name: Build and push - Backend
         uses: docker/build-push-action@v5
         with:
@@ -210,17 +206,14 @@ jobs:
             app/backend/requirements.txt \
             .env.example
 
-      # FIX 7: softprops/action-gh-release@v1 (v2 does not exist)
       - name: Publish Release
         uses: softprops/action-gh-release@v1
         with:
           name: "AlgoTrade ${{ github.ref_name }} - NSE F&O Signal Platform"
           body: |
-            ## AlgoTrade ${{ github.ref_name }}
+            ## AlgoTrade ${{ github.ref_name }} - Production Ready
 
-            **Version 1 - Production Ready**
-
-            ### Strategies included
+            ### Strategies
             - S1 Calendar Spread, S2 Iron Condor, S3 Short Straddle, S4 0DTE Scalp
             - S5 PCR Contrarian (live NSE OI data)
             - E1 EMA Crossover, E2 VWAP Reversion, E3 ORB Breakout, E4 Gap Fill
@@ -228,13 +221,7 @@ jobs:
             ### Quick Start
             ```bash
             docker compose up --build
-            # http://localhost  ->  demo@algotrade.in / demo123
-            ```
-
-            ### Docker Images (GHCR)
-            ```
-            ghcr.io/${{ github.repository_owner }}/algotrade-backend:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/algotrade-frontend:${{ github.ref_name }}
+            # http://localhost -> demo@algotrade.in / demo123
             ```
           files: algotrade-${{ github.ref_name }}.tar.gz
           draft: false

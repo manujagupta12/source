@@ -10,14 +10,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 1500,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          charts: ['recharts'],
-        },
-      },
-    },
+    // Raise warning limit — single-bundle is fine for this app size
+    chunkSizeWarningLimit: 2000,
   },
 })
