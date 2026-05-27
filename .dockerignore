@@ -1,0 +1,40 @@
+# FIX 8: dockerignore was missing - Docker COPY was pulling in
+# algo/node_modules (1000+ files) and __pycache__ into the image
+
+# Git
+.git/
+.github/
+
+# Node artefacts - exclude from ALL locations
+node_modules/
+**/node_modules/
+algo/node_modules/
+app/frontend/dist/
+app/frontend/.vite/
+
+# Python artefacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+venv/
+.venv/
+env/
+
+# Secrets and data
+.env
+.env.*
+data/
+
+# Docs
+*.md
+*.log
+logs/
+.DS_Store
+Thumbs.db
+
+# Algo junk accidentally in repo
+algo/package.json
+algo/package-lock.json

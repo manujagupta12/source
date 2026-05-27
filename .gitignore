@@ -1,39 +1,33 @@
-# ── AlgoTrade .gitignore ──
+# AlgoTrade .gitignore
 
-# Environment secrets
+# Secrets
 .env
 .env.local
 .env.*.local
 
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
 venv/
 .venv/
 env/
 
-# Node
+# Node - ALL locations
 node_modules/
+**/node_modules/
+algo/node_modules/
 app/frontend/dist/
 app/frontend/.vite/
+
+# Algo junk that should never be committed
+algo/package.json
+algo/package-lock.json
 
 # Docker
 *.tar
@@ -48,7 +42,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# Data files (sensitive)
+# Data files (sensitive - mount at runtime)
 data/*.xls
 data/*.xlsx
 data/*.csv
