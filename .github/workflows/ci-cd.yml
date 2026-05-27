@@ -7,7 +7,6 @@ on:
   pull_request:
     branches: [main]
 
-# Opt into Node.js 24 runner to avoid deprecation failures
 env:
   REGISTRY: ghcr.io
   IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/algotrade-backend
@@ -26,8 +25,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Python ─────────────────────────────────────────────────
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
+      # ── Python ────────────────────────────────────────────────
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -39,26 +38,24 @@ jobs:
           key: pip-${{ runner.os }}-${{ hashFiles('app/backend/requirements.txt') }}
           restore-keys: pip-${{ runner.os }}-
 
-      - name: Install Python deps + flake8
+      - name: Install Python deps
         run: pip install -r app/backend/requirements.txt flake8
 
-      # Lint only fatal errors (syntax/undefined) — style issues don't block CI
-      - name: Lint backend
+      - name: Lint backend (fatal errors only)
         run: |
           flake8 app/backend/main.py algo/pcr_strategy.py \
             --select=E9,F821,F823 \
             --max-line-length=200 \
             --count
 
-      # Syntax-check only — don't import (avoids asyncio/uvicorn crash)
       - name: Validate Python syntax
         run: |
           python -m py_compile app/backend/main.py
           python -m py_compile algo/pcr_strategy.py
           echo "Python syntax OK"
 
-      # ── Node / Vite ──────────────────────────────────────────────
-      - name: Set up Node ${{ env.NODE_VERSION }}
+      # ── Node / Vite ───────────────────────────────────────────
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -67,15 +64,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('app/frontend/package.json') }}
           restore-keys: npm-${{ runner.os }}-
 
-      # --legacy-peer-deps: React 19 has unresolved peer-dep conflicts
       - name: Install frontend deps
         working-directory: app/frontend
-        run: npm install --legacy-peer-deps
+        run: npm install
 
-      # vite.config.js now uses simple build (no manualChunks)
       - name: Build frontend (Vite)
         working-directory: app/frontend
         run: npm run build
@@ -172,7 +167,7 @@ jobs:
           echo "### Docker Images Published" >> $GITHUB_STEP_SUMMARY
           echo "| Image | Version |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend  | ${{ steps.meta-backend.outputs.version }}  |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend  | ${{ steps.meta-backend.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend | ${{ steps.meta-frontend.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
 
   release:
@@ -212,11 +207,6 @@ jobs:
           name: "AlgoTrade ${{ github.ref_name }} - NSE F&O Signal Platform"
           body: |
             ## AlgoTrade ${{ github.ref_name }} - Production Ready
-
-            ### Strategies
-            - S1 Calendar Spread, S2 Iron Condor, S3 Short Straddle, S4 0DTE Scalp
-            - S5 PCR Contrarian (live NSE OI data)
-            - E1 EMA Crossover, E2 VWAP Reversion, E3 ORB Breakout, E4 Gap Fill
 
             ### Quick Start
             ```bash
