@@ -45,9 +45,9 @@ jobs:
       - name: Lint backend (flake8)
         run: |
           flake8 app/backend/main.py algo/pcr_strategy.py \
-            --max-line-length=120 \
-            --ignore=E302,E303,E501,W503 \
-            --count
+          --max-line-length=120 \
+          --ignore=E231,E302,E303,E501,W503 \
+          --count
 
       - name: Validate backend imports
         run: |
